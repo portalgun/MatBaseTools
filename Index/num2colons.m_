@@ -1,0 +1,2 @@
+function col = num2colons(num)
+    col=strrep(Num.toStr(double(num)),'0',':');
