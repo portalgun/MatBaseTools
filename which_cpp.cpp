@@ -27,7 +27,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
       if ((stat(current_path.c_str(), &sb) == 0) && (sb.st_mode & S_IXOTH))
         {
-          plhs[0]=mxCreateString(current_path);
+          plhs[0]=mxCreateString(current_path.c_str());
           return;
          }
 

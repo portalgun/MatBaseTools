@@ -29,8 +29,8 @@ void mexFunction(int nlhs, mxArray *plhs[],
                  int nrhs, const mxArray *prhs[])
 {
     struct stat S;
-    char* FileName
-    int bLink
+    char* FileName;
+    int bLink;
 
     // Check number and type of arguments:
     if (nrhs != 1) {
@@ -52,16 +52,16 @@ void mexFunction(int nlhs, mxArray *plhs[],
     if (lstat(FileName, &S) == 0) {
         bLink = S_ISLNK(S.st_mode);
     } else {  // File not found:
-        bLink = 0
+        bLink = 0;
     }
 
     // return same name if not symlink
     if (bLink == 0) {
         plhs[0]=mxCreateString(FileName);
-        return
+        return;
     }
 
-    string str = do_readlink(Path);
+    string str = do_readlink(FileName);
 
     // return dest if symlink, empty if broken
     const char* cstr=str.c_str();

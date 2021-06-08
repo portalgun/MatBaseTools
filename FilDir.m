@@ -52,12 +52,12 @@ methods(Static)
 %% LINK
     function bSuccess=ln(origin,destination)
         if FilDir.bC
-            bSuccess=FilDir.lnC_(origin,desitination);
+            bSuccess=FilDir.lnC_(origin,destination);
         else
             bSuccess=FilDir.lnUnix_(origin,desitination);
         end
     end
-    function bSuccesss=isLink(thing)
+    function bSuccess=isLink(thing)
         if FilDir.bC
             bSuccess=FilDir.isLinkC_(thing);
         else
@@ -83,7 +83,7 @@ methods(Static, Access=private)
         cmd=['ln -s ' origin ' ' destination];
         [~,bSuccess]=Sys.run(cmd);
     end
-    function out=isLinkC()
+    function out=isLinkC_(thing)
         out=issymlink_cpp(thing);
     end
     function out= isLinkCmd_(dire)

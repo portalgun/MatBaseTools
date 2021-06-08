@@ -171,7 +171,7 @@ methods(Static, Access=private)
         h=strrep(h,'-','_');
     end
     function out=hostnameC_()
-        h=hostname_cpp();
+        out=hostname_cpp();
     end
     function [out]=isWnMngrCmd_()
         %CHECKs if a window manager is running, opposed to running the operating system in headless

@@ -3,7 +3,8 @@ methods(Static)
 %% LIST
     function out=home()
         % XXX
-        out=Dir.homeCmd_();
+        out=Dir.homeC_();
+        %out=Dir.homeCmd_();
     end
 
     function [fnames,fnamesfull]=re(dire,str)
@@ -20,6 +21,11 @@ methods(Static)
             return
         end
         [fnames,fnamesfull]=Dir.re_(dire,str,0,1);
+    end
+    function out=parent(dire)
+        dire=Dir.parse(dire);
+        spl=strsplit(dire,filesep)
+        out=strjoin(spl(1:end-1),filesep);
     end
     function [dirs,dirsfull]=dirs(dire)
         %if iscell(dire)
@@ -236,6 +242,9 @@ methods(Static)
 end
 %% PRIVATE
 methods(Static, Access=private)
+    function out=homeC_()
+        out=home_cpp();
+    end
     function out=homeCmd_()
         if isunix()
             [~,out]=unix('echo $HOME');

@@ -6,14 +6,17 @@ methods(Static)
         dirs='';
         if Sys.islinux()
             for i = 1:length(pathlist)
-                dirs=[dirs Px.gen_path2(pathlist{i})];
+                p=Path.gen(pathlist{i});
+                dirs=[dirs ':' p];
             end
-            dirs=dirs(1:end-1);
+            %dirs=dirs(1:end-1);
             dirs=[defpath pathsep dirs];
         else
             dirs=Px.gen_path(pathlist);
             dirs=[defpath pathsep dirs];
         end
+        dirs=strrep(dirs,';',pathsep);
+        assignin('base','dirs',dirs)
         try
             %oldPath = addpath(dirs, '-end');
             oldPath = matlabpath(dirs);
@@ -94,13 +97,17 @@ methods(Static, Access=private)
         if exist('dire','var') && ~isempty(dire)
             old=cd(dire);
         end
-        notDirs={'.julia*','\.git*','\.svn*','private/*','\.ccls-cache/*','_AR*','_old*','@*','__MACOSX*','.DS_*'};
+        notDirs={'.julia*','\.git*','\.svn*','private*','\.ccls-cache/*','_AR*','_old*','+*','@*','__MACOSX*','.DS_*'};
+        if endsWith(dire,filesep)
+            dire=dire(1:end-1);
+        end
+
         if Sys.isInstalled('fd')
-            cmd=['fd --color never --type d '];
+            cmd=['fd . -L --color never --type d '];
             for i =1:length(notDirs)
                 cmd=[cmd  '-E ' '''' notDirs{i} ''' '];
             end
-            cmd=[cmd '--base-directory ' dire];
+            cmd=[cmd '--base-directory .'  ];
         else
             cmd='find -L "$(pwd -P)" -type d';
             for i = 1:length(notDirs)
@@ -109,10 +116,13 @@ methods(Static, Access=private)
         end
 
         [~,out]=unix(cmd);
-        out(end)=[];
-        out=strrep(out,newline,':');
+        if ~isempty(out)
+            out(end)=[];
+            out=strrep(out,newline,[':' dire filesep]);
+            out=[dire filesep out];
+        end
 
-        if exist('cd','var') && ~isempty(cd)
+        if exist('old','var') && ~isempty(old)
             cd(old);
         end
     end

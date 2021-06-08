@@ -9,8 +9,13 @@ properties(Constant)
     MOV={'AVI', 'MJ2', 'MPG', 'ASF', 'ASX', 'WMV', 'MOV', 'MP4', 'M4V', 'MOV'}
 end
 methods(Static)
+    function out=is(fname)
+        e=exist(fname,'file');
+        out=e==2 || e==3;
+    end
     function out=exist(fname)
-        out=exist(fname,'file')==2;
+        e=exist(fname,'file');
+        out=e==2 || e==3;
     end
     function out=find(dire,re,depth)
         if ~exist('depth','var')
@@ -125,6 +130,33 @@ methods(Static)
             out=ownsPC__(file,bDir);
         end
 
+    end
+%% cell
+    function []=append(fname,text);
+        fid = fopen('fname', 'a');
+        if iscell(text)
+            text=strjoin(text,newline);
+        end
+        fprintf(fid, '%s', text);
+        fclose(fid);
+    end
+    function []=rewrite(fname,text);
+        fid = fopen('fname', 'w');
+        if iscell(text)
+            text=strjoin(text,newline);
+        end
+        fprintf(fid, '%s', text);
+        fclose(fid);
+    end
+    function lines=cell(fname)
+        fid = fopen(fname);
+        tline = fgetl(fid);
+        lines={};
+        while ischar(tline)
+            lines{end+1}=tline;
+            tline = fgetl(fid);
+        end
+        fclose(fid);
     end
 end
 methods(Static, Access=private)
