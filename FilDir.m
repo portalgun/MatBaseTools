@@ -137,6 +137,7 @@ methods(Static, Access=private)
         if ~exist('dire','var') || isempty(dire)
             dire=pwd;
         end
+        bFd=Sys.isInstalled('fd');
         if exist('depth','var') && ~isempty(depth) && bFd
             depthStr=['--maxdepth ' num2str(depth) ' '];
         elseif exist('depth','var') && ~isempty(depth)
@@ -156,7 +157,7 @@ methods(Static, Access=private)
         if dire(end) ~= filesep
             dire=[dire filesep];
         end
-        if Sys.isInstalled('fd')
+        if bFd
             cmd=['fd --color never ' depthStr typeStr  '--regex "' re  '" --base-directory ' dire];
         else
             cmd=['find ' dire '  -regextype egrep ' depthStr typeStr '-regex ".*' filesep re '" -printf "%P\n" | cut -f 1 -d "."' ];
