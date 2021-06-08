@@ -1,6 +1,6 @@
 classdef Alph < handle
 methods(Static)
-    function newStr = Lower(str);
+    function newStr = lower(str);
     % function newStr = Str.Alph.Lower(str);
     %
     % example call:
@@ -43,8 +43,8 @@ methods(Static)
 
         end
     end
-    function newStr = Upper(str);
-    % function newStr = Str.Alph.Upper(str);
+    function newStr = upper(str);
+    % function newStr = Str.Alph.upper(str);
     %
     % example call:
     %              newStr=Str.Alph.Lower('aBcDEFG')
@@ -86,7 +86,7 @@ methods(Static)
     end
     function [new, ind] = sorti(old)
         %case insensitive sort
-        [~,ind]=sort(upper(old));
+        [~,ind]=sort(Str.Alph.upper(old));
         new=old(ind);
     end
 
