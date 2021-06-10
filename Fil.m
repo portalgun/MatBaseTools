@@ -41,7 +41,7 @@ methods(Static)
     function [dire,Name,Ext]=parts(name)
         [dire,~,~]=fileparts(name);
         dire=Dir.parse(dire);
-        name=regexprep(name,strrep(['^' dire],'+','\+');,'');
+        name=regexprep(name,strrep(['^' dire],'+','\+'),'');
         Name=regexprep(name,'\.[A-za-z]{1,5}$','');
         Ext=regexprep(name,Name,'');
     end
