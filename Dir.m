@@ -319,7 +319,6 @@ methods(Static, Access=private)
         else
             cur=[parts{1} filesep];
         end
-        cur
         bNew=0;
         if ~exist(cur,'dir') && ~bP && length(parts)~=1
             error(['Parent directory ' cur ' does not exist']);
