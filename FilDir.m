@@ -92,7 +92,7 @@ methods(Static, Access=private)
             [~,out]=system(cmd);
             out=strrep(out,newline,'');
             out=contains(out,'ReparsePoint');
-        elseif Px.islinux
+        elseif Sys.islinux
             out=issymlink(dire);
         else
             out=~unix(['test -L ' dire]);
@@ -109,13 +109,13 @@ methods(Static, Access=private)
             return
         elseif ismac
             str=['readlink ' dire];
-        elseif Px.islinux
+        elseif Sys.islinux
             out=readlink(dire);
             return
         end
         [bS,out]=unix(str);
         out=out(1:end-1);
-        if (Px.islinux && bS==1) || (ismac && bS==1 && ~isempty(out))
+        if (Sys.islinux && bS==1) || (ismac && bS==1 && ~isempty(out))
             out=nan;
         elseif ismac && (ismac && bS==1 && isempty(out))
             out=dire;

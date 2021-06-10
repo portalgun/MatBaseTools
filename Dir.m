@@ -24,7 +24,7 @@ methods(Static)
     end
     function out=parent(dire)
         dire=Dir.parse(dire);
-        spl=strsplit(dire,filesep)
+        spl=strsplit(dire,filesep);
         out=strjoin(spl(1:end-1),filesep);
     end
     function [dirs,dirsfull]=dirs(dire)
