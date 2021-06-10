@@ -133,7 +133,24 @@ methods(Static)
     end
 %% cell
     function []=append(fname,text);
-        fid = fopen('fname', 'a');
+        if ~exist(fname,'file')
+            Fil.touch(fname);
+        end
+        fid = fopen(fname, 'a');
+        if iscell(text)
+            text=strjoin(text,newline);
+        end
+        fprintf(fid, '%s', text);
+        fclose(fid);
+    end
+    function write(fname,text,bOverwrite)
+        if ~exist('bOverwrite','var') || isempty(bOverwerite)
+            bOverwrite=false;
+        end
+        if exist(fname,'file') && ~bOverwrite
+            error(['file ' fname ' exists. Use Fil.rewrite if needed.'])
+        end
+        fid = fopen(fname, 'w');
         if iscell(text)
             text=strjoin(text,newline);
         end
@@ -141,7 +158,10 @@ methods(Static)
         fclose(fid);
     end
     function []=rewrite(fname,text);
-        fid = fopen('fname', 'w');
+        if ~exist(fname,'file')
+            Fil.touch(fname);
+        end
+        fid = fopen(fname, 'w');
         if iscell(text)
             text=strjoin(text,newline);
         end
