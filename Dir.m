@@ -329,7 +329,7 @@ methods(Static, Access=private)
 
         for i = 2:length(parts)
             cur=[cur parts{i} filesep];
-            if ~exist(cur,'dir') ~bP && length(parts)~=i
+            if ~exist(cur,'dir') && ~bP && length(parts)~=i
                 error(['Parent directory ' cur ' does not exist']);
             elseif ~exist(cur,'dir')
                 mkdir(cur);
