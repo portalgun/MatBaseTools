@@ -1,22 +1,39 @@
 classdef Path < handle
 methods(Static)
-    function oldPath=add(pathlist,defpath)
+    function oldPath=replace(pathlist,first,last)
         pathlist=unique(pathlist);
+        if ~exist('last','var')
+            last=[];
+        elseif ~isempty(last)
+            last=[';' last];
+        end
+        if ~exist('first','var')
+            first=[];
+        elseif ~isempty(first)
+            first=[first ';'];
+        end
 
         dirs='';
         if Sys.islinux()
             for i = 1:length(pathlist)
                 p=Path.gen(pathlist{i});
-                dirs=[dirs ':' p];
+                dirs=[dirs ';' p];
             end
             %dirs=dirs(1:end-1);
-            dirs=[defpath pathsep dirs];
         else
             dirs=Px.gen_path(pathlist);
-            dirs=[defpath pathsep dirs];
         end
-        dirs=strrep(dirs,';',pathsep);
-        assignin('base','dirs',dirs)
+        dirs=strrep(dirs,pathsep,';');
+        dirs=[first dirs last];
+        %while true
+        %    if endsWith(dirs,pathsep)
+        %        dirs=dirs(1:end-1);
+        %    else
+        %        break
+        %    end
+        %end
+        %assignin('base','pathlist',pathlist);
+        %assignin('base','dirs',transpose(strsplit(dirs,';')));
         try
             %oldPath = addpath(dirs, '-end');
             oldPath = matlabpath(dirs);
@@ -97,7 +114,7 @@ methods(Static, Access=private)
         if exist('dire','var') && ~isempty(dire)
             old=cd(dire);
         end
-        notDirs={'.julia*','\.git*','\.svn*','private*','\.ccls-cache/*','_AR*','_old*','+*','@*','__MACOSX*','.DS_*'};
+        notDirs={'.julia*','\.git*','\.svn*','private*','\.ccls-cache/*','_AR*','_old*','\+*','@*','__MACOSX*','\.DS_*'};
         if endsWith(dire,filesep)
             dire=dire(1:end-1);
         end
@@ -107,7 +124,7 @@ methods(Static, Access=private)
             for i =1:length(notDirs)
                 cmd=[cmd  '-E ' '''' notDirs{i} ''' '];
             end
-            cmd=[cmd '--base-directory .'  ];
+            cmd=[cmd '--base-directory ' dire ];
         else
             cmd='find -L "$(pwd -P)" -type d';
             for i = 1:length(notDirs)
@@ -120,6 +137,8 @@ methods(Static, Access=private)
             out(end)=[];
             out=strrep(out,newline,[':' dire filesep]);
             out=[dire filesep out];
+        elseif isempty(out)
+            out=dire;
         end
 
         if exist('old','var') && ~isempty(old)

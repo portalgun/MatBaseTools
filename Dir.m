@@ -6,6 +6,10 @@ methods(Static)
         out=Dir.homeC_();
         %out=Dir.homeCmd_();
     end
+    function out=isempty()
+        dirs=dir(dire);
+        out=numel(dirs) <= 2;
+    end
 
     function [fnames,fnamesfull]=re(dire,str)
         [fnames,fnamesfull]=Dir.re_(dire,str,1,1);
@@ -73,6 +77,32 @@ methods(Static)
 
         %REMOVE DUPLICATE
         expFcnListAll=unique(expFcnListAll);
+    end
+%% RM
+    function out=rm_rf(dire)
+        if exist(dire,'file')
+            delete(file);
+            return
+        elseif FilDir.isLink(dire,'file')
+            FilDir.unlink(dire);
+            return
+        elseif ~exist(dire,'dir')
+            error(['File/directory ' dire ' does not exist.']);
+        end
+
+        dirs=FilDir.find(dire,'.*',[],'d');
+        text=[ 'Remove the following directories and their contents?' newline strjoin(dirs,newline)];
+        r=Input.yn(text);
+        if ~r
+            return
+        end
+        files=find(dire,'.*',[],'f');
+        for i = 1:length(files)
+            delete(files{i});
+        end
+        for i =1:length(dirs)
+            rmdir(dirs{i});
+        end
     end
 
 

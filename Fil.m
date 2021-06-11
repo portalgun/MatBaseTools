@@ -114,7 +114,11 @@ methods(Static)
         end
     end
     function obj=touch(fname)
-        fclose(fopen(fname,'w'));
+        if Fil.is(fname)
+            fclose(fopen(fname,'a'));
+        else
+            fclose(fopen(fname,'w'));
+        end
     end
     function out=owns(file)
 

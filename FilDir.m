@@ -53,8 +53,26 @@ methods(Static)
     function bSuccess=ln(origin,destination)
         if FilDir.bC
             bSuccess=FilDir.lnC_(origin,destination);
-        else
+        elseif isunix
             bSuccess=FilDir.lnUnix_(origin,desitination);
+        else
+            % TODO
+            error('unhandled OS');
+        end
+    end
+    function bSuccess=link(origin,destination)
+        bSuccess=FilDir.ln(origin,destination);
+    end
+    function bSuccess=relink(origin,destination);
+        FilDir.unlink(destination);
+        FilDir.ln(destination);
+    end
+    function unlink(thing)
+        if ~FilDir.isLink(thing)
+            error(['File/directory ' thing ' is not a link.']);
+        else
+            % XXX need to test
+            delete(thing);
         end
     end
     function bSuccess=isLink(thing)
@@ -92,8 +110,8 @@ methods(Static, Access=private)
             [~,out]=system(cmd);
             out=strrep(out,newline,'');
             out=contains(out,'ReparsePoint');
-        elseif Sys.islinux
-            out=issymlink(dire);
+        %elseif Sys.islinux
+        %    out=issymlink(dire);
         else
             out=~unix(['test -L ' dire]);
         end
@@ -158,11 +176,14 @@ methods(Static, Access=private)
             dire=[dire filesep];
         end
         if bFd
-            cmd=['fd --color never ' depthStr typeStr  '--regex "' re  '" --base-directory ' dire];
+            cmd=['fd -L --color never ' depthStr typeStr  '--regex "' re  '" --base-directory ' dire];
+            [~,out]=unix(cmd);
         else
-            cmd=['find ' dire '  -regextype egrep ' depthStr typeStr '-regex ".*' filesep re '" -printf "%P\n" | cut -f 1 -d "."' ];
+            %cmd=['find ' dire '  -regextype egrep ' depthStr typeStr '-regex ".*' filesep re '" -printf "%P\n" | cut -f 1 -d "."' ];
+            cmd=['find ' dire '  -regextype egrep ' depthStr typeStr '-regex ".*' filesep re '"' ];
+            [~,out]=unix(cmd);
+            out=strrep(out,dire,'');
         end
-        [~,out]=unix(cmd);
         if ~isempty(out);
             out(end)=[];
             out=strsplit(out,newline);
