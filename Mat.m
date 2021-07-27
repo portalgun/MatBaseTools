@@ -132,21 +132,21 @@ methods(Static)
     function out=getRecalledHist()
         out=com.mathworks.mde.cmdhist.AltHistory.getRecalledCommands();
     end
-    function out=rmLastHistory(k)
-        if ~exist('k','var') || isempty(k)
-            k=1;
-        end
-        all=Mat.getAllHistory();
-        %sess=Mat.getSessionHistory();
-        %n=length(all)-length(sess)
-        all=all(end-k);
-        assignin('base','all',all)
+    %function out=rmLastHistory(k)
+    %    if ~exist('k','var') || isempty(k)
+    %        k=1;
+    %    end
+    %    all=Mat.getAllHistory();
+    %    %sess=Mat.getSessionHistory();
+    %    %n=length(all)-length(sess)
+    %    all=all(end-k);
+    %    assignin('base','all',all)
 
-        Mat.rmAllHistory();
-        Mat.addHistory(all);
+    %    Mat.rmAllHistory();
+    %    Mat.addHistory(all);
 
 
 
-    end
+    %end
 end
 end
