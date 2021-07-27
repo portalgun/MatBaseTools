@@ -59,6 +59,27 @@ methods(Static)
         line=Fil.getFirstLine(fname,char(37),false);
         out=~startsWith(line,'function') && ~startsWith(line,'classdef');
     end
+    function isDiff(fname1,fname2)
+        fid1=fopen(fname1);
+        fid2=fopen(fname2);
+        while true
+            tline1=fgetl(fid1);
+            tline2=fgetl(fid2);
+            if ~ischar(tline1) && ~ischar(tline2)
+                out=false;
+                break
+            elseif  ~ischar(tline1) || ~ischar(tline2)
+                out=true;
+                break
+            elseif ~strcmp(tline1,tline2)
+                out=true;
+                break
+            end
+        end
+        fclose(fid1);
+        fclose(fid2);
+
+    end
     function out=type(fname)
         % TODO
     end

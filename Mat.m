@@ -67,14 +67,14 @@ methods(Static)
         mdir=Dir.parse(prefdir);
         file=[mdir 'history_m.bak'];
     end
-    function file=get_history_xml()
-        dire=prefdir;
-        mHistX=[dire 'History.xml'];
+    function fname=get_history_xml()
+        dire=Dir.parse(prefdir);
+        fname=[dire 'History.xml'];
         %com.mathworks.util.FileUtils.getPreferencesDirectory
     end
-    function file=get_bak_history_xml()
+    function fname=get_bak_history_xml()
         dire=prefdir;
-        mHistX=[dire 'History.bak'];
+        fname=[dire 'History.bak'];
         %com.mathworks.util.FileUtils.getPreferencesDirectory
     end
     function get_history_bak()
@@ -86,16 +86,26 @@ methods(Static)
         com.mathworks.mde.cmdhist.AltHistory.load(file,false);
     end
     function out=rmLastHistory()
+        Mat.saveHistory;
         file=Mat.getHistory();
-        if Mat.isgui && isunix()
-            cmd=['tac ' file ' | sed ''/<command .*/ {s///; :loop; n; b loop}'' | tac > ' file];
-            unix(cmd);
-        elseif ~isunix()
-            error('OS not yet handled');
-        elseif ~Mat.isgui
-            error('Non gui not handled yet');
-        end
+        lines=Fil.cell(file);
+        ind=find(startsWith(lines,"<command "),1,'last');
+        lines(ind)=[];
+        Fil.rewrite(file,lines);
         Mat.historyReload();
+    end
+    function out=rmLastBatchHistory()
+        Mat.saveHistory;
+        file=Mat.getHistory();
+        lines=Fil.cell(file);
+        ind=find(startsWith(lines,"<command batch"),1,'last');
+
+        match=Str.RE.match(lines{ind},'batch="[0-9]+"');
+        num=num2str(Str.RE.match(match,'[0-9]+'));
+        ind=find(contains(lines,[' batch="' num '"']));
+        lines(ind)=[];
+        Fil.rewrite(file,lines);
+        Mat.historyReload;
     end
 %%
     function historyRead()
