@@ -111,14 +111,14 @@ methods(Static)
     function out=getAllHistory()
         out=com.mathworks.mlservices.MLCommandHistoryServices.getAllHistory();
     end
-    function out=getAllHistory()
-        % XXX
-        out=com.mathworks.mlservices.MLCommandHistoryServices.notify();
-    end
-    function out=getAllHistory()
-        % XXX
-        out=com.mathworks.mlservices.MLCommandHistoryServices.notifyAll();
-    end
+    %function out=notify()
+    %    % XXX
+    %    out=com.mathworks.mlservices.MLCommandHistoryServices.notify();
+    %end
+    %function out=notifyAll()
+    %    % XXX
+    %    out=com.mathworks.mlservices.MLCommandHistoryServices.notifyAll();
+    %end
     function out=rmAllHistory()
         com.mathworks.mlservices.MLCommandHistoryServices.removeAll();
         %com.mathworks.ide.cmdline.CommandHistory.deleteAllHistoryForDesktop();
