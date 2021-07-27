@@ -16,12 +16,13 @@ methods(Static)
             out=~cell2mat(cellfun( @(x) isempty(regexp(x,exp)),cell,'UniformOutput',false)');
         end
     end
-    function out=match(c,exp,bIgnoreCase)
+    function out=match(str,re,bIgnoreCase)
         if ~exist('bIngoreCase','var') || isempty(bIgnoreCase)
             bIgnoreCase=0;
         end
-        out=Str.RE.ismatch(c,exp,bIgnoreCase);
-        out=c(out);
+        [s,e]=regexp(str,re);
+        % XXX handle multiple
+        out=str(s:e);
     end
     function out=rep(in,re,rep,varargin)
         out=regexprep(in,re,rep,varargin{:});

@@ -1,5 +1,12 @@
 classdef Path < handle
 methods(Static)
+    function out=contains(dire)
+        if ~strcmp(dire,'/') && endsWith(dire,'/')
+            dire=dire(1:end-1);
+        end
+        p=transpose(strsplit(path,':'));
+        out=ismember(dire,p);
+    end
     function oldPath=replace(pathlist,first,last)
         pathlist=unique(pathlist);
         if ~exist('last','var')
@@ -14,26 +21,17 @@ methods(Static)
         end
 
         dirs='';
-        if Sys.islinux()
-            for i = 1:length(pathlist)
-                p=Path.gen(pathlist{i});
-                dirs=[dirs ';' p];
-            end
-            %dirs=dirs(1:end-1);
-        else
-            dirs=Px.gen_path(pathlist);
+        for i = 1:length(pathlist)
+            p=Path.gen(pathlist{i});
+            %if i == 1
+            %    strrep(p,':',newline)
+            %end
+            dirs=[dirs ';' p];
         end
         dirs=strrep(dirs,pathsep,';');
         dirs=[first dirs last];
-        %while true
-        %    if endsWith(dirs,pathsep)
-        %        dirs=dirs(1:end-1);
-        %    else
-        %        break
-        %    end
-        %end
-        %assignin('base','pathlist',pathlist);
-        %assignin('base','dirs',transpose(strsplit(dirs,';')));
+        %strrep(strrep(dirs,';',newline),':',newline)
+
         try
             %oldPath = addpath(dirs, '-end');
             oldPath = matlabpath(dirs);
@@ -119,7 +117,8 @@ methods(Static, Access=private)
             dire=dire(1:end-1);
         end
 
-        if Sys.isInstalled('fd')
+        bFd=Sys.isInstalled('fd');
+        if bFd
             cmd=['fd . -L --color never --type d '];
             for i =1:length(notDirs)
                 cmd=[cmd  '-E ' '''' notDirs{i} ''' '];
@@ -135,8 +134,12 @@ methods(Static, Access=private)
         [~,out]=unix(cmd);
         if ~isempty(out)
             out(end)=[];
-            out=strrep(out,newline,[':' dire filesep]);
-            out=[dire filesep out];
+            if ~bFd
+                out=strrep(out,newline,':');
+            else
+                out=strrep(out,newline,[':' dire filesep]);
+                out=[dire filesep out];
+            end
         elseif isempty(out)
             out=dire;
         end
@@ -153,7 +156,7 @@ methods(Static, Access=private)
         %end
 
         if nargin==0,
-            p = Px.gen_path(fullfile(matlabroot,'sbin'));
+            p = Path.gen_path(fullfile(matlabroot,'sbin'));
         if length(p) > 1, p(end) = []; end % Remove trailing pathsep
             return
         end
@@ -193,7 +196,7 @@ methods(Static, Access=private)
             for i=1:length(dirs)
                 dirname = dirs(i).name;
                 if ~strncmp( dirname,classsep,1) && ~strncmp( dirname,packagesep,1) && ~strcmp( dirname,'private') && isempty(regexp(dirname,'^(_Ar|_old|\.svn|\.git|\.hg|^\.\.$)'))
-                    p = [p Px.gen_path([d filesep dirname])]; % recursive calling of this function.
+                    p = [p Path.gen_path([d filesep dirname])]; % recursive calling of this function.
                 end
             end
         else
@@ -206,7 +209,7 @@ methods(Static, Access=private)
                 end
                 if bAdd
                     for j = 1:length(d)
-                        p = [p Px.gen_path([ dire filesep dirname]) ]; % recursive calling of this function
+                        p = [p Path.gen_path([ dire filesep dirname]) ]; % recursive calling of this function
                     end
                 end
                 lastdire=dirname;

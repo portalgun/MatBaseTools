@@ -27,9 +27,39 @@ methods(Static)
         [fnames,fnamesfull]=Dir.re_(dire,str,0,1);
     end
     function out=parent(dire)
+        if iscell(dire)
+            out=cellfun(@Dir.parent,dire,'UniformOutput',false);
+            return
+        end
         dire=Dir.parse(dire);
+        if strcmp(dire,filesep)
+            out='';
+            return
+        elseif endsWith(dire,filesep)
+            dire=dire(1:end-1);
+        end
         spl=strsplit(dire,filesep);
         out=strjoin(spl(1:end-1),filesep);
+        if ~endsWith(out,filesep)
+            out=[out filesep];
+        end
+    end
+    function name=parentName(dire)
+        if iscell(dire)
+            name=cellfun(@Dir.parentName,dire,'UniformOutput',false);
+            return
+        end
+        par=Dir.parent(dire);
+        if isempty(par)
+            name='';
+            return
+        end
+
+        spl=strsplit(par,filesep);
+        name=spl{end-1};
+        if isempty(name)
+            name=filesep;
+        end
     end
     function [dirs,dirsfull]=dirs(dire)
         %if iscell(dire)
@@ -66,7 +96,7 @@ methods(Static)
         %list all dependencies of a given directory
         directory='/home/dambam/Cloud/Code/mat/projects/daveMatTB';
         names=rdir([directory,'/**/*.m']);
-        names={names.name}';
+        names=transpose({names.name});
 
         fcnListAll=cell(0,1);
         for i = 1:length(names)
@@ -248,6 +278,7 @@ methods(Static)
             out=spl{end};
         end
     end
+
     function out=parse(dire)
         out=dire;
         if isempty(dire)

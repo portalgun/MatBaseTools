@@ -108,7 +108,7 @@ methods(Static)
 
     end
     function out=isUpper(in,key)
-        out=ismember(in,Str.Alph.upperA());
+        out=~ismember(in,Str.Alph.lowerA());
 
         if ~exist('key','var') || isempty(key)
             return
@@ -148,6 +148,12 @@ methods(Static)
         else
             error(['Unhandled key: '  key ]);
         end
+   end
+   function out=isLorRorB_e(in,key)
+        if ~exist('key','var')
+            key=[];
+        end
+        out=isempty(in) || Str.Alph.isLorRorB(in,key);
    end
 %% SETS
     function A = lowerA()

@@ -1,5 +1,12 @@
 classdef Input < handle
+% evaluate and do not add to history
+%com.mathworks.mlservices.MLExecuteServices.consoleEval('')
 methods(Static)
+    function out = read(str,varargin)
+        cmd=[ 'input(''' str ''',''' varargin{:} ''')'];
+        cmd
+        com.mathworks.mlservices.MLExecuteServices.consoleEval(cmd);
+    end
     function out = yn(question)
         while true
             resp=input([question ' (y/n): '],'s');

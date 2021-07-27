@@ -20,7 +20,7 @@ methods(Static)
             bIndAll(bInd & ~logical(bIndAll))=i;
         end
         ind=find(bIndAll==0);
-        for i = ind'
+        for i = transpose(ind)
             bIndAll(i)=i;
         end
     end
@@ -143,7 +143,7 @@ methods(Static)
         %Logical elements to their own array
         bInd=nUnique==2;
         B=D(:,bInd);
-        Bflds=Dflds(bInd');
+        Bflds=Dflds(transpose(bInd));
 
         %Remove logical and bad arrays
         bInd=nUnique<=2;
@@ -175,9 +175,9 @@ methods(Static)
             nfloat=4;
         end
 
-        A=convert(A);
-        colSz=get_col_sz(A);
-        A=justify(A,colSz,justification,nfloat);
+        A=Cell.convert(A);
+        colSz=Cell.get_col_sz(A);
+        A=Cell.justify(A,colSz,justification,nfloat);
 
 
         A=join(A,sep,2);

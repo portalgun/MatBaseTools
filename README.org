@@ -1,0 +1,6 @@
+* MatBaseTools
+Extensions that make things easier in matlab.
+- Replacing broken builtins (e.g. fileparts)
+- Simplifying common routines (e.g. file operations)
+- Making slow things faster (e.g. system functions)
+- Support for things that should exixt (e.g. significant digits)

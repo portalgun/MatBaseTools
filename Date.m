@@ -1,5 +1,8 @@
 classdef Date < handle
-methods
+methods(Static)
+    function out=timeFilStr()
+        out=char(datetime('now','Format','yyyy-MM-dd-HH-mm'));
+    end
     function ind = newest(C)
         lind=zeros(size(C));
         ind=[];

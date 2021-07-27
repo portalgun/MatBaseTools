@@ -46,12 +46,13 @@ methods(Static)
         end
 
     end
+end
 methods(Static, Access=private)
     function V = insert_col(V,inds,vals)
         if length(inds)==1
             inds=Vec.col(inds);
             vals=Vec.col(vals);
-            V=[V(1:inds-1,:); vals(i,:); V(inds:end,:)];
+            V=[V(1:inds-1,:); vals(1,:); V(inds:end,:)];
         else
             for i = 1:length(inds)
                 V=[V(:,1:inds(i)-1,:); vals(i,:); V(inds(i):end,:)];
@@ -62,7 +63,7 @@ methods(Static, Access=private)
         inds=Vec.row(inds);
         vals=Vec.row(vals);
         if length(inds)==1
-            V=[V(:,1:inds-1), vals(:,i), V(:,inds:end)];
+            V=[V(:,1:inds-1), vals(:,1), V(:,inds:end)];
         else
             for i = 1:length(inds)
                 V=[V(:,1:inds(i)-1), vals(:,i), V(:,inds(i):end)];

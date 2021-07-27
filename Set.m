@@ -1,7 +1,7 @@
 classdef Set < handle
 methods(Static)
     function [value,bA] = unique(A)
-        value = A(sum(bsxfun(@eq, A(:), A(:).'))==1);
+        value = A(sum(bsxfun(@eq, A(:), transpose(A(:)) ))==1);
     end
     function bInd=isUnique(A,dim)
     %function bInd=isunique(A,dim)
@@ -84,9 +84,9 @@ methods(Static)
         end
 
         if nargin == 2
-            out=Set.Set.distribute2_(in{:});
+            out=Set.distribute2_(in{:});
         else
-            out=Set.Set.distributeN_(in{:});
+            out=Set.distributeN_(in{:});
         end
 
         if sum(cellind)>0
@@ -115,7 +115,7 @@ methods(Static, Access=private)
             out(:,i)=v;
         end
     end
-    function out=Set.distributeN_(varargin)
+    function out=distributeN_(varargin)
         p=perms([1:nargin]);
         nP=size(p,1);
 
@@ -137,7 +137,7 @@ methods(Static, Access=private)
         out=horzcat(out{:});
     end
 
-    function C = Set.distribute2_(A,B)
+    function C = distribute2_(A,B)
         % function C = Set.distribute(A,B)
         % Set.distribute elements between vectors
         % Useful for expanding indices
@@ -160,22 +160,22 @@ methods(Static, Access=private)
         %C=repelem(A,numel(B));
         %D=repmat(B,numel(A),1);
         if ~isequal(size(C,1),size(D,1))
-            C=C';
+            C=transpose(C);
         end
 
         C=[C D];
     end
-    function out=compare_num_all(in)
+    function out=compare_num_all_(in)
         out=all(logical(~diff(in(:))));
     end
-    function out=compare_cell_all(in)
+    function out=compare_cell_all_(in)
         A=in{1};
         out=all(cellfun(@(x) isequal(x,A),in));
     end
-    function out=compare_num(in,dim);
+    function out=compare_num_(in,dim);
         out=all(logical(~diff(in,[],dim)),dim);
     end
-    function out=compare_cell(in,dim)
+    function out=compare_cell_(in,dim)
         A=dimSliceSelect(in,dim,1);
         sz=size(in);
         if sz(dim) ~= 1

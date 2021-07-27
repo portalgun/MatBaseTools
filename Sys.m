@@ -89,6 +89,17 @@ methods(Static)
     function out=isWnMngr()
         out=isWnMngrCmd_();
     end
+    function out=os()
+        if ismac()
+            out='mac';
+        elseif ispc
+            out='win';
+        elseif Sys.islinux
+            out='linux';
+        elseif isunix
+            out='unix'
+        end
+    end
 end
 methods(Static, Access=private)
     function out = whoamiC_()

@@ -9,14 +9,85 @@ properties(Constant)
     MOV={'AVI', 'MJ2', 'MPG', 'ASF', 'ASX', 'WMV', 'MOV', 'MP4', 'M4V', 'MOV'}
 end
 methods(Static)
-    function out=is(fname)
-        e=exist(fname,'file');
-        out=e==2 || e==3;
-    end
+%% IS
     function out=exist(fname)
         e=exist(fname,'file');
         out=e==2 || e==3;
     end
+    function out=is(fname)
+        e=exist(fname,'file');
+        out=e==2 || e==3;
+    end
+    function out=ism(fname)
+        if isempty(Fil.ext(fname))
+            fname=[fname '.m'];
+        end
+        e=exist(fname,'file');
+        out=(e==2 || e==3) && strcmp(Fil.ext(fname),'m');
+    end
+    function out=ismat(fname)
+        if isempty(Fil.ext(fname))
+            fname=[fname '.mat'];
+        end
+        e=exist(fname,'file');
+        out=(e==2 || e==3) && strcmp(Fil.ext(fname),'mat');
+    end
+    function out=isClass(fname)
+        if isempty(Fil.ext(fname))
+            fname=[fname '.m'];
+        end
+        out=Fil.ism(fname);
+        if ~out; return; end
+        line=Fil.getFirstLine(fname,char(37),false);
+        out=startsWith(line,'classdef');
+    end
+    function out=isFunction(fname)
+        if isempty(Fil.ext(fname))
+            fname=[fname '.m'];
+        end
+        out=Fil.ism(fname);
+        if ~out; return; end
+        line=Fil.getFirstLine(fname,char(37),false);
+        out=startsWith(line,'function');
+    end
+    function out=isScript(fname)
+        if isempty(Fil.ext(fname))
+            fname=[fname '.m'];
+        end
+        out=Fil.ism(fname);
+        if ~out; return; end
+        line=Fil.getFirstLine(fname,char(37),false);
+        out=~startsWith(line,'function') && ~startsWith(line,'classdef');
+    end
+    function out=type(fname)
+        % TODO
+    end
+%% PARTS
+    function [varargout]=parts(name)
+        [dire,~,~]=fileparts(name);
+        dire=Dir.parse(dire);
+        varargout{1}=dire;
+        if nargout == 1
+            return
+        end
+        name=regexprep(name,strrep(['^' dire],'+','\+'),'');
+        Name=regexprep(name,'\.[A-za-z]{1,5}$','');
+        varargout{2}=Name;
+        if nargout == 2
+            return
+        end
+        varargout{3}=regexprep(name,Name,'');
+    end
+    function [Name]=name(fname)
+        [~,Name]=Fil.parts(fname);
+    end
+    function [Ext]=ext(fname)
+        Ext=Str.RE.match(fname,'\.[a-zA-Z0-9]+$');
+        if ~isempty(Ext)
+            Ext=Ext(2:end);
+        end
+    end
+%% _
     function out=find(dire,re,depth)
         if ~exist('depth','var')
             depth=[];
@@ -38,16 +109,56 @@ methods(Static)
             movefile(fname,newname);
         end
     end
-    function [dire,Name,Ext]=parts(name)
-        [dire,~,~]=fileparts(name);
-        dire=Dir.parse(dire);
-        name=regexprep(name,strrep(['^' dire],'+','\+'),'');
-        Name=regexprep(name,'\.[A-za-z]{1,5}$','');
-        Ext=regexprep(name,Name,'');
+    function run(fname,layer)
+        %Fil.isScript(fname)
+        %if ~exist('layer','var') || isempty(layer)
+        %    layer=1;
+        %end
+        %bBase=false;
+        %if Fil.isScript(fname)
+
+
+
+        %    lines=Fil.cell(fname);
+        %    S=dbstack;
+        %    if numel(S) == 1
+        %        cmd=['run(' fname ');']
+        %        evalin('base',cmd)
+        %        return
+        %    end
+        %    first='evalin(''caller'',''run(';
+        %    last=''')';
+        %    cmd=[ first fname last];
+        %    try
+        %        evalin('caller', cmd)
+        %    catch ME
+        %        cmd
+        %        rethrow(ME)
+        %    end
+        %    return
+
+        %    for i = 1:length(lines)
+        %        try
+        %            evalin(caller,[lines{i} ';']);
+        %        catch ME
+        %            disp(lines{i});
+        %            rethrow(ME);
+        %        end
+        %    end
+        %else
+        %    error('unhandled type');
+        %end
     end
     function [out,code]=check(fname,bMk,bPrint,bX)
     %function [out,code]=check(dire,bMk,bPrint,bX)
     % bPrint=2 -> error
+    %
+    % CODES
+    % RWX - NOT FIL
+    % rwx - NOT DIR
+    % E   - not exist
+    % D   - is dir not file
+    % F   - is file not dir
 
         if ~exist('bMk','var') || isempty(bMk)
             bMk=0;
@@ -86,6 +197,7 @@ methods(Static)
             return
         end
         [r,w,x]=FilDir.perms(fname);
+
         x=x | ~bX;
 
         if r && w && x && ~d
@@ -129,58 +241,157 @@ methods(Static)
         end
 
         if isunix
-            out=ownsUnix_(file,bDir);
+            out=Fil.ownsUnix_(file,bDir);
         elseif ispc
-            out=ownsPC__(file,bDir);
+            out=Fil.ownsPC_(file,bDir);
         end
 
     end
-%% cell
-    function []=append(fname,text);
-        if ~exist(fname,'file')
+%% RW
+    function out=isOpen(fname)
+        list=fopen('all');
+        out=ismember(fname,list);
+    end
+    function varargout=append(fname,text);
+        if ~isnumeric(fname) && ~Fil.exist(fname)
             Fil.touch(fname);
         end
-        fid = fopen(fname, 'a');
+        if isnumeric(fname) && ~isequal(fname,-1)
+            fid=fname;
+        elseif ~isnumeric(fname)
+            fid = fopen(fname,'a');
+        end
         if iscell(text)
             text=strjoin(text,newline);
         end
         fprintf(fid, '%s', text);
-        fclose(fid);
+        if nargout > 0
+            varargout{1}=fid;
+        else
+            fclose(fid);
+        end
     end
-    function write(fname,text,bOverwrite)
+    function line=getFirstLine(fname,commentChar,bError)
+        if ~exist('commentChar','var')
+            commentChar=[];
+        end
+        if ~exist('bError','var')
+            bError=true;
+        end
+        if isnumeric(fname) && ~isequal(fname,-1)
+            fid=fname;
+        elseif bError && ~Fil.exist(fname)
+            error([ fname ' does not exist']);
+        else
+            fid = fopen(fname);
+        end
+        tline = '';
+        while ischar(tline)
+            if ~isempty(tline) && ~isempty(commentChar)
+                spl=strsplit(tline,commentChar);
+                tline=spl{1};
+            end
+            if ~isempty(tline)
+                tline=strtrim(tline);
+            end
+            if ~isempty(tline)
+                line=tline;
+                break
+            end
+            tline = fgetl(fid);
+        end
+    end
+    function varargout=write(fname,text,bOverwrite)
         if ~exist('bOverwrite','var') || isempty(bOverwerite)
             bOverwrite=false;
         end
         if exist(fname,'file') && ~bOverwrite
-            error(['file ' fname ' exists. Use Fil.rewrite if needed.'])
+            error(['file ' fname ' exists. Use Fil.rewrite if needed.']);
         end
-        fid = fopen(fname, 'w');
+        if isnumeric(fname) && ~isequal(fname,-1)
+            fid=fname;
+        else
+            fid = fopen(fname,'w');
+        end
+
         if iscell(text)
             text=strjoin(text,newline);
         end
         fprintf(fid, '%s', text);
-        fclose(fid);
+        if nargout > 0
+            varargout{1}=fid;
+        else
+            fclose(fid);
+        end
     end
-    function []=rewrite(fname,text);
+    function varargout=clear(fname)
+        fid=Fil.rewrite(fname,'');
+        if nargout > 0
+            varargout{1}=fid;
+        else
+            fclose(fid);
+        end
+    end
+    function varargout=rewrite(fname,text);
         if ~exist(fname,'file')
             Fil.touch(fname);
         end
-        fid = fopen(fname, 'w');
+        if isnumeric(fname) && ~isequal(fname,-1)
+            fid=fname;
+        else
+            fid = fopen(fname,'w');
+        end
         if iscell(text)
             text=strjoin(text,newline);
         end
         fprintf(fid, '%s', text);
-        fclose(fid);
+        if nargout > 0
+            varargout{1}=fid;
+        else
+            fclose(fid);
+        end
     end
-    function lines=cell(fname)
-        fid = fopen(fname);
+    function [lines,varargout]=cell(fname,~,~)
+        if ~exist(fname,'file')
+            error('file does not exist');
+        end
+        if isnumeric(fname) && ~isequal(fname,-1)
+            fid=fname;
+        else
+            fid = fopen(fname);
+        end
         tline = fgetl(fid);
         lines={};
         while ischar(tline)
             lines{end+1}=tline;
             tline = fgetl(fid);
         end
+        if nargout > 1
+            varargout{1}=fid;
+        else
+            fclose(fid);
+        end
+    end
+    function fid=open(fname)
+        [dire,loc]=Fil.parts(fname);
+        fid = fopen(fname,'a+');
+        %obj.fid = fopen(obj.fname,'w+');
+        %obj.CLfid=onCleanup(@() fclose(obj.fid));
+    end
+    function obj=close(fid)
         fclose(fid);
+    end
+    function obj=hasLines(fname,lines)
+        if ~iscell(lines)
+            lines={lines};
+        end
+        [flines,fid]=Fil.cell(fname);
+        out=ismember(lines,flines);
+        if nargout > 1
+            varargout{1}=fid;
+        else
+            fclose(fid);
+        end
     end
 end
 methods(Static, Access=private)

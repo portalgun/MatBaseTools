@@ -1,8 +1,10 @@
 classdef AlphNum < handle
+properties(Constant)
+    A=['abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ12345677890']
+end
 methods(Static)
-    function A = A()
-        A=['abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ12345677890'];
-        A=A(:);
+    function out=is(in)
+        out=ismember(in,Str.AlphNum.A);
     end
 end
 end

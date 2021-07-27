@@ -40,9 +40,9 @@ methods(Static)
 
         %%
         user=Sys.whoami();
-        Groups=groups();
+        Groups=Sys.groups();
         permissions=FilDir.prms_(file);
-        owners=owns(file);
+        owners=Fil.owns(file);
         if isunix
             [rPerm,wPerm,xPerm]=FilDir.unix_fun_(user,Groups,owners,permissions);
         elseif ispc
@@ -50,6 +50,54 @@ methods(Static)
         end
     end
 %% LINK
+    function easyln(src,dest,bTest,home)
+        if ~exist('bTest','var') || isempty(bTest)
+            bTest=false;
+        end
+
+        if ~exist('home','var') || isempty(home)
+            home=Dir.home();
+        end
+        if endsWith(home,'/')
+            home=home(1:end-1);
+        end
+        src=strrep(src,'~',home);
+
+        % get source of source
+        if ~ispc
+            src=FilDir.readLink(src);
+        end
+
+        % LINK IF DOESNT EXIST
+        bExist=exist(dest,'dir') || exist(dest,'file');
+        if ~bExist
+            FilDir.ln(src,dest);
+            return
+        end
+
+        % ERROR IF DEST NOT SYMBOLIC
+        bLink=FilDir.isLink(dest);
+        if ~bLink
+            error([ 'Unexpected non-symbolic link at ' dest ]);
+            return
+        end
+
+        % CHECK FIX IF EXISTING IS POINTING TO INCORRECT LOCATION
+        trueSrc=FilDir.readLink(dest);
+        if isnan(src)
+            error('Something went wrong');
+        end
+        if ~bTest && ~strcmp(src,trueSrc)
+            warning(['Fixing bad symlink ' trueSrc ' to ' src]);
+            delete(dest);
+            FilDir.ln(src,dest);
+        elseif bTest
+            disp(dire);
+            disp(src);
+            disp(src);
+        end
+    end
+
     function bSuccess=ln(origin,destination)
         if FilDir.bC
             bSuccess=FilDir.lnC_(origin,destination);
@@ -155,7 +203,11 @@ methods(Static, Access=private)
         if ~exist('dire','var') || isempty(dire)
             dire=pwd;
         end
-        bFd=Sys.isInstalled('fd');
+        try
+            bFd=Sys.isInstalled('fd');
+        catch
+            bFd=false;
+        end
         if exist('depth','var') && ~isempty(depth) && bFd
             depthStr=['--maxdepth ' num2str(depth) ' '];
         elseif exist('depth','var') && ~isempty(depth)
@@ -176,11 +228,25 @@ methods(Static, Access=private)
             dire=[dire filesep];
         end
         if bFd
-            cmd=['fd -L --color never ' depthStr typeStr  '--regex "' re  '" --base-directory ' dire];
+            cmd=['fd -L --color never ' depthStr typeStr  '--regex ''' re  ''' --base-directory ' dire];
             [~,out]=unix(cmd);
+        elseif ismac
+            dired=dire;
+            while endsWith(dired,filesep)
+                dired=dired(1:end-1);
+            end
+            cmd=['find -L ' dired ' ' depthStr typeStr '-regex ''' re '''' ];
+            [~,out]=unix(cmd);
+
+            out=strrep(out,dire,'');
+            if isempty(out)
+                cmd=['find -L ' dired ' ' depthStr typeStr '-regex ''.*/' re '''' ];
+                [~,out]=unix(cmd);
+                out=strrep(out,dire,'');
+            end
         else
             %cmd=['find ' dire '  -regextype egrep ' depthStr typeStr '-regex ".*' filesep re '" -printf "%P\n" | cut -f 1 -d "."' ];
-            cmd=['find ' dire '  -regextype egrep ' depthStr typeStr '-regex ".*' filesep re '"' ];
+            cmd=['find ' dire '  -regextype egrep ' depthStr typeStr '-regex ''' re '''' ];
             [~,out]=unix(cmd);
             out=strrep(out,dire,'');
         end

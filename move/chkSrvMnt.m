@@ -4,7 +4,7 @@ function [exitflag]=chkSrvMnt()
 % CREATED BY DAVID WHITE
 
 while true
-    directory=BLdirs('srv');
+    directory=Env.var('DATA','SRV');
     subdirs=dir(directory);
     if length(subdirs)<=2
         bSubDirs=0;
@@ -18,7 +18,7 @@ while true
     end
 
     exitflag=0;
-    directory=BLdirs('srv');
+    directory=Env.var('DATA','SRV');
     subdirs=dir(directory);
     if length(subdirs)<=2
         bSubDirs=0;
