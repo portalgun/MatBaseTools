@@ -3,8 +3,9 @@
 #include <limits.h>
 #if defined _WIN32
   #include <winsock.h>
+#elif __APPLE__
+  #define __USE_POSIX
 #endif
-#define __USE_POSIX
 
 
 void mexFunction(int nlhs, mxArray *plhs[],
