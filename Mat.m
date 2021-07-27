@@ -44,44 +44,44 @@ methods(Static)
         com.mathworks.mlservices.MLExecuteServices.executeCommand(cmd);
     end
 %% HISTORY get
-    function file=getHistory(obj)
+    function file=getHistory()
         if Mat.isgui()
-            file=Mat.get_history_xml(obj);
+            file=Mat.get_history_xml();
         else
-            file=Mat.get_history_m(obj);
+            file=Mat.get_history_m();
         end
     end
-    function file=getBakHistory(obj)
+    function file=getBakHistory()
         if Mat.isgui()
-            file=Mat.get_bak_history_xml(obj);
+            file=Mat.get_bak_history_xml();
         else
-            file=Mat.get_bak_history_m(obj);
+            file=Mat.get_bak_history_m();
         end
     end
 %% PRIV
-    function file=get_history_m(obj)
+    function file=get_history_m()
         mdir=Dir.parse(prefdir);
         file=[mdir 'history.m'];
     end
-    function file=get_bak_history_m(obj)
+    function file=get_bak_history_m()
         mdir=Dir.parse(prefdir);
         file=[mdir 'history_m.bak'];
     end
-    function file=get_history_xml(obj)
+    function file=get_history_xml()
         dire=prefdir;
         mHistX=[dire 'History.xml'];
         %com.mathworks.util.FileUtils.getPreferencesDirectory
     end
-    function file=get_bak_history_xml(obj)
+    function file=get_bak_history_xml()
         dire=prefdir;
         mHistX=[dire 'History.bak'];
         %com.mathworks.util.FileUtils.getPreferencesDirectory
     end
-    function get_history_bak(obj)
+    function get_history_bak()
         mHistB=[dire 'History.bak'];
     end
 %%
-    function obj=historyReload(obj)
+    function historyReload()
         file=java.io.File(Mat.getHistory());
         com.mathworks.mde.cmdhist.AltHistory.load(file,false);
     end
