@@ -4,7 +4,7 @@ methods(Static)
     end
     function direName=get_version_dire_name(version,site)
         %site__prj__versionORhash
-        site=regexprep(site,'https*://','');
+        site=regexprep(site,'https*://?','');
         site=regexprep(site,'\..*?/','/');
         if endsWith(site,'/')
             site=site(1:end-1);
@@ -31,8 +31,7 @@ methods(Static)
             'out equals 1'
             % TODO
         elseif out==2
-            'out equals 2'
-            % TODO
+            disp(['Warning: cannot find repo at ' site])
         elseif out==3
             origin=Git.get_origin(direName);
             if ~strcmp(origin,site)
