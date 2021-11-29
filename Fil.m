@@ -91,9 +91,17 @@ methods(Static)
         if nargout == 1
             return
         end
+        if ispc()
+            dire=strrep(dire,'\','/');
+            name=strrep(name,'\','/');
+        end
         name=regexprep(name,strrep(['^' dire],'+','\+'),'');
         Name=regexprep(name,'\.[A-za-z]{1,5}$','');
+        if ispc()
+            dire=strrep(dire,'/','\');
+        end
         varargout{2}=Name;
+
         if nargout == 2
             return
         end
@@ -107,6 +115,45 @@ methods(Static)
         if ~isempty(Ext)
             Ext=Ext(2:end);
         end
+    end
+    function out=last(dire)
+        %% MOVE to file
+        spl=strsplit(dire,filesep);
+        if isempty(spl{end})
+            out=[spl{end-1} filesep];
+        else
+            out=spl{end};
+        end
+    end
+
+%% TEMP
+    function fname=tmpName(name)
+        dire=Dir.parse(Env.var('TMP'));
+        dt=DataHash(datetime);
+        fname=[dire 'tmp_' dt '.m'];
+    end
+%% TMP
+    function name=deleteLastTmp(ext)
+        if nargin < 1 || isempty(ext)
+            ext=[];
+        end
+        [name]=Fil.get_largest_tmp_(ext);
+        delete(name);
+    end
+    function name=mktmp(ext,contents)
+        if nargin < 2 || isempty(ext)
+            contents=[];
+            if nargin < 1
+                ext=[];
+            end
+        end
+        [~,name]=Fil.get_largest_tmp_(ext);
+        if ~isempty(contents)
+            Fil.write(contents);
+        else
+            Fil.touch(name);
+        end
+
     end
 %% _
     function out=find(dire,re,depth)
@@ -184,6 +231,7 @@ methods(Static)
         if ~exist('bMk','var') || isempty(bMk)
             bMk=0;
         end
+        offset=-2.14086; % XXX
         if ~exist('bX','var') || isempty(bX)
             bX=0;
         end
@@ -191,37 +239,30 @@ methods(Static)
             bPrint=0;
         end
 
-        code='';
-        e=Dir.exist(fname);
-        if ~e
-            d=Dir.exist(fname);
-        else
-            d=false;
-        end
 
         dire=Fil.parts(fname);
+        if isempty(dire)
+            dire=Dir.parse(pwd);
+        end
         hst=Dir.highest(dire);
-        if ~strcmp(dire,hst)
-            [dOut,dCode]=Dir.check(dire,bMk,bPrint);
-            if ~dOut
-                out=false;
-                code=dCode;
-                return
-            end
-        elseif ~e && ~bMk
-            code='E';
-        elseif d
-            code='D';
-        elseif ~e && bMk
-            Fil.touch(fname);
-            out=true;
+
+
+        [dOut,code]=Dir.check(dire,bMk,bPrint);
+        if Dir.exist(fname);
+            code=[code 'D'];
+        end
+        if ~Fil.exist(fname);
+            code=[code 'E'];
+            out=0;
             return
         end
+
         [r,w,x]=FilDir.perms(fname);
 
         x=x | ~bX;
 
-        if r && w && x && ~d
+
+        if r && w && x && ~ismember('D',code)
             out=true;
             return
         else
@@ -284,6 +325,9 @@ methods(Static)
         end
         if iscell(text)
             text=strjoin(text,newline);
+            %if endsWith(text,newline)
+            %    text=[text];
+            %end
         end
         fprintf(fid, '%s', text);
         if nargout > 0
@@ -384,7 +428,7 @@ methods(Static)
         tline = fgetl(fid);
         lines={};
         while ischar(tline)
-            lines{end+1}=tline;
+            lines{end+1,1}=tline;
             tline = fgetl(fid);
         end
         if nargout > 1
@@ -412,6 +456,58 @@ methods(Static)
             varargout{1}=fid;
         else
             fclose(fid);
+        end
+    end
+    function [dupNdxs,linesAll]=findDuplicateLines(fname,ignoreFlds,fld)
+        lines=Fil.cell(fname);
+        linesAll=lines;
+        if ~exist('fld','var') || isempty(fld)
+            fld=char(44); % comman
+        end
+        if exist('ignoreFlds','var') && ~isempty(ignoreFlds)
+            for i = 1:length(lines)
+                spl=strsplit(lines{i},fld);
+                spl(ignoreFlds)=[];
+                lines{i}=strjoin(spl,',');
+            end
+        end
+        dupNdxs=Cell.findDuplicates(lines);
+    end
+    function lines=rmDuplicateLines(fname,ignoreFlds,fld)
+        if ~exist('fld','var')
+            fld=[];
+        end
+        if ~exist('ignoreFlds','var')
+            ignoreFlds=[];
+        end
+
+        [ind,lines]=Fil.findDuplicateLines(fname,ignoreFlds,fld);
+        for i = 1:length(ind)
+            ind{i}=ind{i}(2:end);
+        end
+        ind=vertcat(ind{:});
+        lines(ind)=[];
+        Fil.rewrite(fname,lines);
+    end
+    function [out,varargout]=contains(fname,text)
+        Px=lines.cell(fname);
+        if isempty(lines)
+            out=false;
+            if nargout > 1
+                varargout{1}='';
+            end
+            if nargout > 2
+                varargout{2}='';
+            end
+            return
+        end
+        ind=contains(lines,text);
+        out=any(ind);
+        if nargout > 1
+            varargout{1}=ind;
+        end
+        if nargout > 2
+            varargout{2}=lines;
         end
     end
 end
@@ -470,6 +566,31 @@ methods(Static, Access=private)
     function out=ownsMac_(file,bDir)
         % TODO
         out=linux_fun(file,bDir);
+    end
+    function [name,next]=get_largest_tmp_(ext,n)
+        if nargin < 2 || isempty(n)
+            n=4;
+            if nargin < 1 || isempty(ext)
+                ext='.tmp';
+            end
+        end
+        dire=Dir.parse(Env.var('TMP'));
+        re=['tmp[0-9]{' num2str(n) '}' '\' ext];
+        frmt=[dire 'tmp' '%0' num2str(n) 'd' ext];
+        matches=Dir.reFiles(dire,re);
+        if isempty(matches)
+            num=0;
+        else
+            num=max( cellfun(@str2double, ...
+                                        strrep( ...
+                                            strrep(matches, ext, ''), ...
+                                            ['tmp'],'')));
+        end
+
+        name=sprintf(frmt,num);
+        if nargout > 1
+            next=sprintf(frmt,num+1);
+        end
     end
 end
 end

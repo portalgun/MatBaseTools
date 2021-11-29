@@ -1,5 +1,71 @@
 classdef Range < handle
-methods(Static)
+methods(Static) 
+    function [ROWS,COLS]=getConvRC(IszRC,kernSz)
+        Rh=floor(kernSz(1)/2);
+        Rw=floor(kernSz(2)/2);
+        COLS=Rw+1:IszRC(2)-Rw-1;
+        ROWS=Rh+1:IszRC(1)-Rh-1;
+    end
+    function out=isMonotonicInc(X)
+        if nargin < 2 || isempty(dim)
+            if Vec.isRow(X)
+                dim=2;
+            else
+                dim=1;
+            end
+        end
+        inc=diff(X,[],dim);
+        d=diff(inc,[],dim);
+        out=(all(d > 0,dim) || all(abs(d) < 1e-10,dim))  && all(inc >= 0,dim);
+    end
+    function out=isMonotonicDec(X,dim)
+        if nargin < 2 || isempty(dim)
+            if Vec.isRow(X)
+                dim=2;
+            else
+                dim=1;
+            end
+        end
+        inc=diff(X,[],dim);
+        d=diff(inc,[],dim);
+        out=(all(d > 0,dim) | all(abs(d) < 1e-10,dim))  & all(inc <= 0,dim);
+    end
+    function out=isMonotonicIncStrict(X)
+        if nargin < 2 || isempty(dim)
+            if Vec.isRow(X)
+                dim=2;
+            else
+                dim=1;
+            end
+        end
+        inc=diff(X,[],dim);
+        d=diff(inc,[],dim);
+        out=(all(d > 0,dim) | all(abs(d) < 1e-10,dim))  & all(inc > 0,dim);
+    end
+    function out=isMonotonicDecStrict(X)
+        if nargin < 2 || isempty(dim)
+            if Vec.isRow(X)
+                dim=2;
+            else
+                dim=1;
+            end
+        end
+        inc=diff(X,[],dim);
+        d=diff(inc,[],dim);
+        out=(all(d > 0,dim) | all(abs(d) < 1e-10, dim))  & all(inc < 0,dim);
+    end
+
+    function out=isLog(X,dim)
+        if nargin < 2 || isempty(dim)
+            if Vec.isRow(X)
+                dim=2;
+            else
+                dim=1;
+            end
+        end
+        d=diff(X,3,dim);
+        out=all(d > 0,dim) | all(d < 0,dim);
+    end
     function out=log(i,j,n, a)
     %function out=lnspace(i,j,n=50,k=1)
     % independnt of log base use

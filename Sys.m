@@ -66,8 +66,11 @@ methods(Static)
     end
     function out = whoami()
         % XXX
-        out=Sys.whoamiC_();
-        %out=Sys.whoamiCmd_();
+        if ispc()
+            out=Sys.whoamiCmd_();
+        else
+            out=Sys.whoamiC_();
+        end
     end
     function out = groups()
         % XXX
@@ -75,7 +78,15 @@ methods(Static)
     end
     function h = hostname()
         % XXX
-        h=Sys.hostnameC_();
+        if ispc() % XXX
+            h=Sys.hostnameCmd_();
+        else
+            try
+                h=Sys.hostnameC_();
+            catch
+                h=Sys.hostnameCmd_();
+            end
+        end
         %h=Sys.hostnameCmd_();
     end
     function out = islinux()

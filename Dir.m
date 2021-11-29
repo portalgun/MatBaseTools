@@ -1,6 +1,10 @@
 classdef Dir < handle & FilDir
 methods(Static)
 %% LIST
+    function out=current()
+        db=dbstack;
+        out=Dir.parent(which(db(2).file));
+    end
     function out=home()
         % XXX
         out=Dir.homeC_();
@@ -37,6 +41,10 @@ methods(Static)
             return
         elseif endsWith(dire,filesep)
             dire=dire(1:end-1);
+        end
+        if ~ismember(dire,filesep)
+            out='./';
+            return
         end
         spl=strsplit(dire,filesep);
         out=strjoin(spl(1:end-1),filesep);
@@ -78,7 +86,7 @@ methods(Static)
         dirs(~[s.isdir])=[];
 
         dirs(ismember(dirs,dumbDirs))=[];
-        dirsfull=strcat(dire,dirs);
+        dirsfull=strcat(dire,dirs,filesep);
     end
     function [fnames,fnamesfull]=files(dire)
         if ~isequal(dire(end),filesep)
@@ -87,6 +95,8 @@ methods(Static)
         if ~(exist(dire,'dir')==7)
             error(['Directory does not exist: ' dire]);
         end
+        %out=FilDir.find(dire,re,1,'f'); % XXX doesn't work for hidden
+
         s=dir(dire);
         fnames=transpose({s.name});
         fnames([s.isdir])=[];
@@ -132,6 +142,18 @@ methods(Static)
         end
         for i =1:length(dirs)
             rmdir(dirs{i});
+        end
+    end
+    function out=rmBrokenLinks(dire)
+        % XXX TEST
+        nodes=dir(dire);
+        nodes=nodes(3:end);
+        nodes=Vec.col({nodes.name});
+        nodes=strcat(dire,nodes);
+        for i = 1:length(nodes)
+            if FilDir.islink(nodes{i}) && FilDir.islinkbroken(nodes{i})
+                FilDir.unlink(nodes{i});
+            end
         end
     end
 
@@ -272,13 +294,20 @@ methods(Static)
 %% CHAR
     function out=last(dire)
         spl=strsplit(dire,filesep);
-        if isempty(spl{end})
-            out=[spl{end-1} filesep];
+        out=[spl{end-1} filesep];
+    end
+    function out=parseRev(dire)
+        if iscell(dire)
+            out=cellfun(@rev_fun,dire,'UniformOutput',false);
         else
-            out=spl{end};
+            out=rev_fun(dire);
+        end
+        function dire= rev_fun(dire)
+            while endsWith(dire,filesep)
+                dire=dire(1:end-1);
+            end
         end
     end
-
     function out=parse(dire)
         out=dire;
         if isempty(dire)
@@ -344,17 +373,8 @@ methods(Static, Access=private)
             fnames=FilDir.find(fpath,re,1,t);
             fnamesfull=strcat(fpath,fnames);
         else
-            Fnames = dir(fpath);
-            Fnames(1:2)=[];
-            if bDir & ~bFiles
-                inds=vertcat(Fnames.isdir);
-            elseif bDir & bFiles
-                inds=ones(size(Fnames));
-            else
-                inds=~vertcat(Fnames.isdir);
-            end
-            fnames = transpose({Fnames.name});
-            fnames = fnames( ~cellfun('isempty', regexp(fnames(inds),re)));
+            fnames=Dir.files(fpath);
+            fnames = fnames( ~cellfun('isempty', regexp(fnames,re)));
             fnamesfull=strcat(fpath,fnames);
         end
 

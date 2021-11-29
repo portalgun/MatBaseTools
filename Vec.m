@@ -25,10 +25,11 @@ methods(Static)
         out=ndims(in)==2 && size(in,1)==1 && size(in,2)>1;
     end
     function out = col(in)
-        if size(in,1)==1 && size(in,2)>1
-            out=in(:);
+        if Vec.isCol(in)
+            out=in;
+            return
         else
-            out=transpose(in(:));
+            out=in(:);
         end
     end
     function out = row(in)

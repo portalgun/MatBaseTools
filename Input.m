@@ -68,15 +68,16 @@ methods(Static)
         end
 
 
-        intxt=['Please select an element (1-' num2str(length(list)) '): ' newline];
+        n=length(list);
+        intxt=[newline 'Please select an element (1-' num2str(n) '): ' newline];
         errtxt=[newline 'Invalid response.' newline];
+        str=cell(n,1);
 
-        str=cell(length(list),1);
-        for i = 1:length(list)
-            str{i}=[num2str(i) ' ' list{i}];
+        num=num2str(Num.nSig(n));
+        for i = 1:n
+            str{i}=sprintf(['% ' num 's   %s'],num2str(i),list{i});
         end
-        str=join(str,newline);
-        str=[str{1} newline];
+        str=strjoin(str,newline);
         fprintf(str);
         n=length(str);
 
@@ -101,6 +102,7 @@ methods(Static)
             bk=repmat('\b',1,n);
             fprintf(bk);
         end
+        fprintf(['Selected ' num2str(ind) ':' newline '    ' out newline]);
     end
     function [out,ind,EXITFLAG] = selectMult(list,strin,bDuplicates)
         %function [out,ind] = basicSelectMult(list)

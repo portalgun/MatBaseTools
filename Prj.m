@@ -1,5 +1,33 @@
 classdef Prj < handle
 methods(Static)
+    function [names,funNames,funLines]=names(layer)
+        if nargin < 1
+            layer=0;
+        end
+        s=dbstack('-completenames');
+        files={s(layer+2:end).file}';
+        funNames={s(layer+2:end).name}';
+        funLines=[s(layer+2:end).line]';
+
+        names=cell(size(files));
+        for i = 1:length(files)
+            names{i}=Prj.name_(files{i});
+        end
+        [names,i]=unique(names,'stable');
+        lastFun=funNames(end,:);
+        lastLine=funLines(end);
+
+        funNames=funNames(i,:);
+        funNames(end,:)=lastFun;
+
+        funLines=funLines(i,:);
+        funLines(end)=lastLine;
+
+        funLines=flipud(funLines);
+        names=flipud(names);
+        funNames=flipud(funNames);
+
+    end
     function [name,dire]=name(file,layers)
         if ~exist('layers','var') || isempty(layers)
             layers=1;
@@ -25,6 +53,11 @@ methods(Static)
     function name=namePath()
         file=[pwd filesep];
         Prj.name(file);
+    end
+end
+methods(Static, Hidden)
+    function test_names()
+        [names,funNames,lines]=Prj.names;
     end
 end
 methods(Static, Access=private)

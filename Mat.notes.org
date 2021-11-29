@@ -1,0 +1,83 @@
+    function out=allMethods()
+        # jd-gui
+        methods('com.mathworks.mde.cmdhist.CmdHistory')
+        methods('com.mathworks.mde.cmdhist.AltHistory')
+        methods('com.mathworks.mde.cmdhist.AltHistoryTable')
+        methods('com.mathworks.mde.cmdhist.HistoryChangedListener')
+        methods('com.mathworks.mde.cmdwin...')
+
+        com.mathworks.mde.cmdhist.AltHistory.clear
+        com.mathworks.mde.cmdhist.AltHistory.showPopup
+        com.mathworks.mde.cmdhist.AltHistory.save
+        com.mathworks.mde.cmdhist.AltHistory.getInstance()
+        com.mathworks.mde.cmdhist.AltHistory.recordCompletion()
+        com.mathworks.mde.cmdhist.AltHistory.getAllCommands()
+        com.mathworks.mde.cmdhist.AltHistory.getSessionCommands()
+        com.mathworks.mde.cmdhist.AltHistory.isPopupShowing()
+
+        com.mathworks.mde.cmdhist.AltHistoryCollection.addTimeStamp()
+        com.mathworks.mde.cmdhist.AltHistoryCollection.deleteEmptySessions()
+        com.mathworks.mde.cmdhist.AltHistoryCollection.delete(paramArrayOfInt)
+        com.mathworks.mde.cmdhist.AltHistoryCollection.clear(paramArrayOfInt)
+
+
+        com.mathworks.mde.cmdhist.AltHistory.addNotify
+        com.mathworks.mde.cmdhist.AltHistory.getSelectedCommands
+        com.mathworks.mde.cmdhist.AltHistory.getSelectedString
+        com.mathworks.mde.cmdhist.AltHistory.cutSelectedCommands
+        com.mathworks.mde.cmdhist.AltHistory.cutSelectedCommands
+        com.mathworks.mde.cmdhist.AltHistory.deleteSelectedCommands
+
+        arr=javaArray('java.lang.Integer',1)
+        arr(1)=java.lang.Integer(1)
+        
+        com.mathworks.mde.cmdhist.AltHistory.delete(arr)
+
+
+        methodsview('com.mathworks.mde.cmdhist.AltHistory')
+        methodsview('com.mathworks.mde.cmdhist.AltHistoryCollection')
+        aHC=com.mathworks.mde.cmdhist.AltHistoryCollection.getInstance()
+        aH=com.mathworks.mde.cmdhist.AltHistory.getInstance()
+        aH.selectAll
+        aH.remove(0)
+
+        aH.load(java.io.File('/home/dambam/.matlab/R2018b/History.xml'),0)
+        sed -i '/a/ {s//c/; :loop; n; b loop}'
+
+
+        # collection
+        com.mathworks.mde.cmdhist.AltHistory.action(java.lang.String('delete-next'))
+        %com.mathworks.mde.cmdhist.AltHistory.remove
+        %com.mathworks.mde.cmdhist.AltHistory.load(File, Bool (append))
+        %com.mathworks.mde.cmdhist.AltHistory.add
+        %com.mathworks.mde.cmdhist.AltHistory.invalidate
+        %com.mathworks.mde.cmdhist.AltHistory.keyUp
+        %com.mathworks.mde.cmdhist.AltHistory.list
+        %com.mathworks.mde.cmdhist.AltHistory.move
+        %com.mathworks.mde.cmdhist.AltHistory.notify
+        %com.mathworks.mde.cmdhist.AltHistory.update
+        %com.mathworks.mde.cmdhist.AltHistory.print
+        %com.mathworks.mde.cmdhist.AltHistory.action('delete-next')
+        %com.mathworks.mde.cmdhist.AltHistory.action('delete-next')
+
+        com.mathworks.mde.cmdhist.CmdHistoryPrefs.getHistoryOptions('delete-next')
+
+        AltHistory
+                               addCommands(final List<String> commandList)
+            public static void load(final File file, final boolean append)
+            public void flushSave() {
+
+        DTClientBase
+
+
+        %com.mathworks.mde.cmdhist.HistoryChangedListener.commandRemoved
+
+        methods('')
+
+        methods('com.mathworks.mlservices.MLCommandHistoryServices')
+        methods('com.mathworks.mlservices.MLCommandHistory')
+        methods('com.mathworks.mlservices.MLCommandHistoryRegistrar')
+        methods('com.mathworks.mlservices.MLCommandWindow')
+        methods('com.mathworks.mlservices.MLCommandWindowRegistrar')
+        methods('com.mathworks.mlservices.MLCommandWindowServices')
+    end

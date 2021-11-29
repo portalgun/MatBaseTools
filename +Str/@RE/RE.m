@@ -16,6 +16,9 @@ methods(Static)
             out=~cell2mat(cellfun( @(x) isempty(regexp(x,exp)),cell,'UniformOutput',false)');
         end
     end
+    function re=combine(res)
+        re=['(' strjoin(res,'|') ')'];
+    end
     function out=match(str,re,bIgnoreCase)
         if ~exist('bIngoreCase','var') || isempty(bIgnoreCase)
             bIgnoreCase=0;

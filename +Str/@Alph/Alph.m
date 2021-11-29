@@ -139,6 +139,16 @@ methods(Static)
             error(['Unhandled key: '  key ]);
         end
    end
+   function out=isLorRorC(in,key)
+        out = isequal(in,'L') || isequal (in,'R') || isequal (in,'C');
+        if ~exist('key','var') || isempty(key)
+            return
+        elseif strcmp(key,'all')
+            out=all(out);
+        else
+            error(['Unhandled key: '  key ]);
+        end
+   end
    function out=isLorRorB(in,key)
         out = isequal(in,'L') || isequal (in,'R') || isequal (in,'B');
         if ~exist('key','var') || isempty(key)

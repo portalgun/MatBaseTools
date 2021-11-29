@@ -17,7 +17,7 @@ methods(Access=private)
         end
         if  exist('os','var') && ~isempty(os)
             obj.os=os;
-        elseif isempty(obj.os) && strcmp(obj.hostname,Sys.hostname)
+        elseif isempty(obj.os)
             obj.os=Sys.os;
         end
 
@@ -36,6 +36,9 @@ methods(Access=private)
     end
     function Opts=read_(obj)
         scopes=['ENV', fliplr(Vec.row(obj.prjs))];
+        if ~iscell(scopes)
+            scopes={scopes};
+        end
 
         types={''};
         if ~isempty(obj.os)
@@ -59,7 +62,7 @@ methods(Access = ?Cfg)
         flds=fieldnames(Opts);
         for i = 1:length(flds)
             name=flds{i};
-            val=Opts.(name);
+            val=Opts{name};
             if isnumeric(val) && numel(val) == 1
                 val=num2str(val);
             end
@@ -83,7 +86,6 @@ methods(Static, Access=private)
         else
             fname=[dire scope '.config'];
         end
-
 
         if Fil.exist(fname)
             Opts2=Cfg.read(fname);
@@ -112,6 +114,40 @@ methods(Static, Access=private)
     end
 end
 methods(Static)
+    function [keys,vals] = getAll(method)
+        if nargin < 1, method = 'system'; end
+        method = validatestring(method, {'java', 'system'});
+
+        switch method
+            case 'java'
+                map = java.lang.System.getenv();  % returns a Java map
+                keys = cell(map.keySet.toArray());
+                vals = cell(map.values.toArray());
+            case 'system'
+                if ispc()
+                    %cmd = 'set "';  %HACK for hidden variables
+                    cmd = 'set';
+                else
+                    cmd = 'env';
+                end
+                [~,out] = system(cmd);
+                vars = regexp(strtrim(out), '^(.*)=(.*)$', ...
+                    'tokens', 'lineanchors', 'dotexceptnewline');
+                vars = vertcat(vars{:});
+                keys = vars(:,1);
+                vals = vars(:,2);
+        end
+
+        % Windows environment variables are case-insensitive
+        if ispc()
+            keys = upper(keys);
+        end
+
+        % sort alphabetically
+        [keys,ord] = sort(keys);
+        vals = vals(ord);
+    end
+
     function out=read(prjs,configDir,hostname,os)
         if ~exist('prjs','var')
             prjs=[];
@@ -126,7 +162,7 @@ methods(Static)
         out=obj.vars;
     end
     function [out,var]=is(name)
-        var=getenv(name);
+        var=builtin('getenv',name);
         out=~isempty(var);
     end
     function out=var(name,varargin)
@@ -176,16 +212,21 @@ methods(Static)
         end
 
         % META PARAM REGEXP
+        % $$
         eRE='\$\$[A-Z]+([A-Z_]+[A-Z]*)*';
-        mmRE='@[A-Z]+\{.*\}';
+        % @
         mRE=['@[A-Za-z][A-Za-z0-9]*[^/' char(123) ']*']; % 123 = left bracket % XXX make more robust
+        % @{}
+        mmRE='@[A-Z]+\{.*\}';
 
 
         % GET METAPARAMS BY TYPE
         eParams=Str.RE.match(out,eRE);
         mmParams=Str.RE.match(out,mmRE);
         tmp=strrep(out,mmParams,repmat('0',1,length(mmParams)));
+        tmp=strrep(tmp,'\@','__AT_REPMAN__');
         mParams=Str.RE.match(tmp,mRE);
+        mParams=strrep(mParams,'__AT_REPMAN__','@');
 
         % GET ORDER OF DIFF META PARAM TYPES
         [se,ee]=regexp(out,eRE);
@@ -193,6 +234,7 @@ methods(Static)
         [sm,em]=regexp(tmp,mRE);
         [sAll,ind]=sort([se smm sm]);
         if isempty(sAll)
+            out=strrep(out,'\@','@');
             return
         end
         eAll=[ee emm em];
@@ -276,7 +318,8 @@ methods(Static)
                 try
                     val=mmCases{i}{1}; % DEFAULT
                 catch
-                    val=mmCases{1}{i}; % DEFAULT
+                    %% NOTE PUTS BACK VARIABLE AS DEFAULT
+                    val=var;
                 end
             end
             if isnumeric(val)
@@ -302,6 +345,7 @@ methods(Static)
             out=Dir.parse(out);
         end
 
+        out=strrep(out,'\@','@');
         %vars=evalin('caller','who');
         %for i = 1:length(obj.callerVars)
         %    var=obj.callerVars{i};

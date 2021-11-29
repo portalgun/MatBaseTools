@@ -22,15 +22,77 @@ methods(Static)
         release = verInfo(1).Release(end-1);
         switch release
             case 'a'
-                release=1;
+                release=0.1;
             case 'b'
-                release=2;
+                release=0.2;
             case 'c'
-                release=3;
+                release=0.3;
             case 'd'
-                release=4;
+                release=0.4;
         end
     end
+    function out=timeout(secs,failFun,fun,varargin)
+        if isempty(failFun)
+            failFun='com.mathworks.mde.cmdwin.CmdWinMLIF.getInstance().processKeyFromC(2,67,''C'')';
+        end
+        t = timer('TimerFcn', ...
+                  failFun, ...
+                  'StartDelay',secs);
+        start(t);
+        out=feval(fun,varargin{:});
+    end
+    function list=featureList()
+        setenv('MWE_INSTALL','1'); list = feature('list'); setenv('MWE_INSTALL');
+        list=sort({list.name}');
+    end
+    function compile_feature()
+        dire=Dir.parent(mfilename('fullpath'));
+        fname=[dire 'feature_list.cpp'];
+        if isunix
+            mex(fname,['-L',matlabroot,'/bin/',computer('arch')],'-lmwservices');
+        else
+            mex(fname,'-llibmwservices');
+        end
+    end
+    function [X]=get_editing()
+        % X
+        %  Filename
+        %  Opened
+        %  Langauge
+        %  Text
+        %  Selection
+        %  SelectedText
+        %  Modified
+        %  Editable
+        X = matlab.desktop.editor.getAll;
+        files=transpose({X.Filename});
+    end
+    function X=get_editing_active()
+        X=matlab.desktop.editor.getActive();
+    end
+    function files=getEditing()
+        X=Mat.get_editing();
+        files=transpose({X.Filename});
+    end
+    function file=getEditingActive()
+        file=matlab.desktop.editor.getActiveFilename();
+    end
+    function []=closeEditing(ind)
+        X=Mat.get_editing();
+        if isempty(X)
+            return
+        end
+        if ~exist('ind','var') || isempty(ind)
+            ind=1;
+        end
+
+        close(X(ind));
+    end
+    function closeEditingAll()
+        X = matlab.desktop.editor.getAll;
+        close(X);
+    end
+
     function evalinBaseQuiet(cmd)
         if ~endsWith(cmd,';')
             cmd=[cmd ';'];
@@ -94,6 +156,18 @@ methods(Static)
         Fil.rewrite(file,lines);
         Mat.historyReload();
     end
+    function out=replaceLastHistory(cmd)
+        Mat.saveHistory;
+        file=Mat.getHistory();
+        lines=Fil.cell(file);
+        ind=find(startsWith(lines,"<command "),1,'last');
+        lines(ind)=[];
+        Fil.rewrite(file,lines);
+
+
+        Mat.addHistory(cmd);
+        Mat.historyReload();
+    end
     function out=rmLastBatchHistory()
         Mat.saveHistory;
         file=Mat.getHistory();
@@ -113,6 +187,7 @@ methods(Static)
         history = string(fileread(file));
     end
     function addHistory(cmd)
+        % XXX DOESN"T WORK
         com.mathworks.mlservices.MLCommandHistoryServices.add(cmd);
     end
     function out=getSessionHistory()

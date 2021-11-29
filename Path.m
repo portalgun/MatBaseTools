@@ -7,44 +7,21 @@ methods(Static)
         p=transpose(strsplit(path,':'));
         out=ismember(dire,p);
     end
-    function oldPath=replace(pathlist,first,last)
-        pathlist=unique(pathlist);
-        if ~exist('last','var')
-            last=[];
-        elseif ~isempty(last)
-            last=[';' last];
+    function oldPath=set(path);
+        if iscell(path)
+            path=strjoin(path,';');
         end
-        if ~exist('first','var')
-            first=[];
-        elseif ~isempty(first)
-            first=[first ';'];
-        end
-
-        dirs='';
-        for i = 1:length(pathlist)
-            p=Path.gen(pathlist{i});
-            %if i == 1
-            %    strrep(p,':',newline)
-            %end
-            dirs=[dirs ';' p];
-        end
-        dirs=strrep(dirs,pathsep,';');
-        dirs=[first dirs last];
-        %strrep(strrep(dirs,';',newline),':',newline)
-
-        try
-            %oldPath = addpath(dirs, '-end');
-            oldPath = matlabpath(dirs);
-        catch
-            warning('Problem adding path. Likley a broken sym link.');
-        end
+        oldPath = matlabpath(path);
     end
     function out=gen(dire)
         if isunix
             out=Path.genCmd_(dire);
+        elseif iscell(dire)
+            out=cellfun(@Path.genDefault_, dire,'UniformOutput',false)';
         else
             out=Path.genDefault_(dire);
         end
+        assignin('base','lib',out);
     end
     function restore_default()
         matlabpath(Path.default());
@@ -109,111 +86,83 @@ methods(Static, Access=private)
         end
     end
     function out = genCmd_(dire)
-        if exist('dire','var') && ~isempty(dire)
+        if nargin < 1 || isempty(dire)
             old=cd(dire);
-        end
-        notDirs={'.julia*','\.git*','\.svn*','private*','\.ccls-cache/*','_AR*','_old*','\+*','@*','__MACOSX*','\.DS_*'};
-        if endsWith(dire,filesep)
-            dire=dire(1:end-1);
+            cl=onCleanup(@() cd(old));
         end
 
-        bFd=Sys.isInstalled('fd');
-        if bFd
-            cmd=['fd . -L --color never --type d '];
-            for i =1:length(notDirs)
-                cmd=[cmd  '-E ' '''' notDirs{i} ''' '];
-            end
-            cmd=[cmd '--base-directory ' dire ];
+        notDirs={'\.julia*','\.hg*','\.git*','\.svn*','private*','\.ccls-cache/*','_AR*','_old*','\+*','@*','__MACOSX*','\.DS_*'};
+        dire=Dir.parseRev(dire);
+
+        if isunix && Sys.isInstalled('fd');
+            out=Path.genFd_(dire,notDirs);
         else
-            cmd='find -L "$(pwd -P)" -type d';
-            for i = 1:length(notDirs)
-                cmd=[cmd ' -not -path ''''"$(pwd -P)"''**/' notDirs{i} ''''];
-            end
+            out=Path.genFind_(dire,notDirs);
         end
+
+    end
+    function out=genFd_(dire,notDirs);
+        %% NOTE RETURNS ABSOLUTE PATH
+        cmd=['fd . -L --color never --type d'];
+        cmd=[cmd ' -E ''' strjoin(notDirs,''' -E ''') ''''];
+        if ~iscell(dire)
+            dire={dire};
+        end
+
+        CMD=cell(length(dire),1);
+        for i = 1:length(dire)
+            par=Dir.parent(dire{i});
+            d=strrep(dire{i},par,'');
+            CMD{i}=['echo ' par d '; ' cmd ' -L -a --base-directory ' par  ' ' d ];
+            %CMD{i}=['echo ' d '; ' cmd ' --base-directory ' par  ' ' d ];
+        end
+        cmd=strjoin(CMD,'; ');
 
         [~,out]=unix(cmd);
         if ~isempty(out)
-            out(end)=[];
-            if ~bFd
-                out=strrep(out,newline,':');
-            else
-                out=strrep(out,newline,[':' dire filesep]);
-                out=[dire filesep out];
-            end
-        elseif isempty(out)
-            out=dire;
+            out=strsplit(strtrim(out),newline)';
         end
 
-        if exist('old','var') && ~isempty(old)
-            cd(old);
+    end
+    function out=genFind_(dire,notDirs)
+        %% NOTE RETURNS ABSOLUTE PATH
+        if ~iscell(dire)
+            dire={dire};
+        end
+        excl=[' -not -path ''*/' strjoin(notDirs,''' -not -path ''**/') ''''];
+
+        CMD=cell(length(dire),1);
+        for i = 1:length(dire)
+            %CMD{i}=['echo ' par d '; ' cmd ' ' d ];
+            CMD{i}=['find -L ' dire{i} ' -type d' excl]; %
+        end
+        cmd=strjoin(CMD,'; ');
+        [~,out]=unix(cmd);
+        if ~isempty(out)
+            out=strsplit(strtrim(out),newline)';
         end
     end
 
     function p = genDefault_(d)
-        % String Adoption
-        %try
-        %    d = convertStringsToChars(d);
-        %end
+        %% NOTE RETURNS ABSOLUTE PATH
 
-        if nargin==0,
-            p = Path.gen_path(fullfile(matlabroot,'sbin'));
-        if length(p) > 1, p(end) = []; end % Remove trailing pathsep
-            return
-        end
-
-        % initialise variables
-        classsep = '@';  % qualifier for overloaded class directories
-        packagesep = '+';  % qualifier for overloaded package directories
-        p = '';           % path to be returned
-
-        % Generate path based on given root directory
-        if iscell(d)
-            f=cellfun(@dir,d,'UniformOutput',false);
-            files=vertcat(f{:});
-            p=[p strjoin(d,pathsep) pathsep];
-            bCell=1;
-        else
-            files = dir(d); % XXX BOTTLENECK
-            p = [p d pathsep];
-            bCell=0;
-        end
+        files = dir(d); % XXX BOTTLENECK
         if isempty(files)
+            p='';
             return
         end
 
-        % Add d to the path even if it is empty.
+        re='^(@.*|\+.*|private|_Ar|\.ccls-cache|_old|\.svn|\.git|\.hg|\.+$|\.DS_|__MACOSX)';
+        dirs = files(logical([files.isdir]) & ~Str.RE.ismatch({files.name},re)');
 
-        % set logical vector for subdirectory entries in d
-        isdir = logical(cat(1,files.isdir));
-        %
-        % Recursively descend through directories which are neither
-        % private nor "class" directories.
-        %
-        dirs = files(isdir); % select only directory entries from the current listing
-        dirs=dirs(3:end);
-
-        if ~bCell
-            for i=1:length(dirs)
-                dirname = dirs(i).name;
-                if ~strncmp( dirname,classsep,1) && ~strncmp( dirname,packagesep,1) && ~strcmp( dirname,'private') && isempty(regexp(dirname,'^(_Ar|_old|\.svn|\.git|\.hg|^\.\.$)'))
-                    p = [p Path.gen_path([d filesep dirname])]; % recursive calling of this function.
-                end
+        p = [d ';'];
+        for i=1:length(dirs)
+            if ~endsWith(dirs(i).name,filesep)
+                f=filesep;
+            else
+                f='';
             end
-        else
-            lastdire='';
-            for i=1:length(dirs)
-                dirname = dirs(i).name;
-                dire    = dirs(i).folder;
-                if ~strcmp(dire,lastdire)
-                    bAdd=~strcmp( dirname,'.') && ~strcmp( dirname,'..') && ~strncmp( dirname,classsep,1) && ~strncmp( dirname,packagesep,1) && ~strcmp( dirname,'private') && isempty(regexp(dirname,'^(_Ar|_old|.svn|.git|.hg)'));
-                end
-                if bAdd
-                    for j = 1:length(d)
-                        p = [p Path.gen_path([ dire filesep dirname]) ]; % recursive calling of this function
-                    end
-                end
-                lastdire=dirname;
-            end
+            p = [p Path.genDefault_(fullfile(d,dirs(i).name))];
         end
     end
 end

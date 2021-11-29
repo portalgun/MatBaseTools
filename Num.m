@@ -1,5 +1,8 @@
 classdef Num < handle
 methods(Static)
+    function out=ceilFix(in)
+        out=ceil(abs(in)).*sign(in);
+    end
     function n =nSig(x)
 
         if any( ~isnumeric(x) | ~isfinite(x) | isa(x,'uint64') )
@@ -11,6 +14,34 @@ methods(Static)
             n=Num.sigfun(x);
         end
 
+    end
+    function out=mag(in)
+        out=10.^floor(log10(abs(in)));
+    end
+    function out=sciMag(in)
+        if Num.isInt(in)
+            in=double(in);
+        end
+        out=floor(log10(abs(in)));
+    end
+    function [float,exp]=toSci(in)
+        float=in/Num.mag(in);
+        exp=Num.sciMag(in);
+
+        if isnan(float)
+            float=0;
+            exp=0;
+        end
+
+        %new=eval([num2str(float) 'e' num2str(exp) ';' ]);
+        %in==new
+    end
+    function out=toSciStr(in)
+        [float,exp]=Num.toSci(in);
+        if float==0 & exp==0
+            out='0';
+        end
+        out=[num2str(float) 'x10^' num2str(exp)];
     end
     function n =nSigDec(in)
         n=Num.nSig(in);
@@ -53,8 +84,10 @@ methods(Static)
 
     end
     function out =isBinary(in,key)
-        if ~isnumeric(in)
-            out=0;
+        if islogical(in)
+            out=true;
+        elseif ~isnumeric(in)
+            out=false;
             return
         end
         out=isequal(in,1) | isequal(in,0);
@@ -104,7 +137,8 @@ methods(Static)
             ,'uint64'...
         };
     end
-    function str=toStr(num,n,bBracket,bSpace)
+    function str=toStr(num,n,bBracket,bSpace,sciCrit)
+        % n - sig dec digits
         if islogical(num)
             num=double(num);
         end
@@ -113,18 +147,33 @@ methods(Static)
             return
         end
         if exist('n','var') && ~isempty(n) && n~=0
-            n=min(max(Num.nSigDec(num)),n);
+            n=min(max(Num.nSigDec(num),[],'all'),n);
             n={['%.' num2str(n) 'f ']};
         else
             n={};
         end
-        if size(num,2) > 1 & size(num,1) > 1
-            s=char(strjoin(join(string(num),2),newline));
-        elseif size(num,1) > 1
-            s=char(strjoin(string(num),newline));
-        else
-            s=num2str(num,n{:});
+        if nargin < 3 || isempty(bBracket)
+            bBracket=false;
         end
+        if nargin < 4 || isempty(bSpace)
+            bSpace=0;
+        end
+        if nargin < 5
+            sciCrit=5;
+        end
+
+
+        if size(num,1) > 1
+            s=arrayfun(@(x) tostrfun__(x,n,sciCrit), num,'UniformOutput',false);
+            str=Cell.toStr(s,bSpace);
+            if bBracket
+                str=strrep(str,newline,['  ' newline '  ']);
+                str=[ char(91) ' ' str ' ' char(93)];
+            end
+            return
+        end
+
+        s=tostrfun__(num,n,sciCrit);
         str=regexprep(s,' +',',');
         if exist('bSpace','var') && ~isempty(bSpace) && bSpace
             str=strrep(str,',',', ');
@@ -132,6 +181,25 @@ methods(Static)
 
         if exist('bBracket','var') && ~isempty(bBracket) && bBracket && numel(num) > 1
             str=['[ ' str ' ]'];
+        end
+        function out=tostrfun__(in,n,sciCrit)
+            if isnan(in)
+                out='NaN';
+                return
+            end
+
+            if abs(Num.sciMag(in)) > sciCrit
+                [float,exp]=Num.toSci(in);
+                if float==0 && exp==0
+                    out=num2str(0,n{:});
+                else
+                    float=num2str(float,n{:});
+                    out=[float 'x10^' num2str(exp)];
+                end
+            else
+                out=num2str(in,n{:});
+            end
+
         end
     end
 

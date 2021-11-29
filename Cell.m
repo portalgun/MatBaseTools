@@ -1,5 +1,81 @@
 classdef Cell < handle
+
 methods(Static)
+    function txt=toStr(C,nspace,sepCol,sepRow,alignChar)
+    %function txt=toStr(C,nspace,sepCol,sepRow,alignChar)
+        %C={'bin','1','2'; 'val','1',''};
+        %
+        if nargin < 2 || isempty(nspace)
+            nspace=0;
+        end
+        if nargin < 3
+            sepCol=' ';%char(44);
+            sepRow=newline;
+        end
+        if nargin < 4
+            alignChar='left';
+        end
+
+        txt=cell(size(C));
+        for i = 1:size(C,2)
+            flds=C(:,i);
+            ninds=cellfun(@isnumeric,flds);
+            linds=cellfun(@islogical,flds);
+            oinds=cellfun(@isobject,flds) | cellfun(@iscell,flds);
+            if all(ninds) && ~all(cellfun(@isempty,flds))
+                flds=cellfun(@Num.toStr,flds,'UniformOutput',false);
+                flds=split(flds,newline);
+            else
+                J=find(ninds);
+                for jj = 1:length(J)
+                    j=J(jj);
+                    if numel(flds{j} > 20)
+                        flds{j}=Range.str(flds{j});
+                    else
+                        flds{j}=Num.toStr(flds{j});
+                    end
+                end
+                J=find(oinds);
+                for jj = 1:length(J)
+                    j=J(jj);
+                    sz=strrep(Num.toStr(size(flds{j})),',',char(215));
+                    flds{j}=[sz ' ' class(flds{j})];
+                end
+
+                J=find(linds);
+                for jj = 1:length(J)
+                    j=J(jj);
+                    if flds{i}
+                        str='true';
+                    else
+                        str=false;
+                    end
+                    sz=strrep(Num.toStr(size(flds{j})),',',char(215));
+                    flds{j}=strrep(Num.toStr(flds{j}),'1','true');
+                    flds{j}=strrep(flds{j},'0','false');
+                end
+            end
+            if i==size(C,2)
+                n=0;
+            else
+                n=nspace;
+            end
+            if i==size(C,2)
+                sepp='';
+            else
+                sepp=sepCol;
+            end
+            txt(:,i)=Cell.space_fun(flds,n,sepp,alignChar);
+        end
+        l=size(C,1);
+        str=cell(l,1);
+        for i = 1:l
+            str{i}=strjoin(txt(i,:),'');
+        end
+        txt=strjoin(str,sepRow);
+
+
+    end
     function [bInd,bIndAll]=cmp(cell1,cell2)
         bIndAll=0;
         bInd=0;
@@ -23,6 +99,12 @@ methods(Static)
         for i = transpose(ind)
             bIndAll(i)=i;
         end
+    end
+    function [dupNdxs,dupNames]=findDuplicates(lines)
+        [uniqueList,~,uniqueNdx] = unique(lines);
+        N = histc(uniqueNdx,1:numel(uniqueList));
+        dupNames = uniqueList(N>1);
+        dupNdxs = arrayfun(@(x) find(uniqueNdx==x), find(N>1), 'UniformOutput',false);
     end
     function [A] = hashes(C)
         %Convert cell of strings into array of hash.
@@ -232,6 +314,31 @@ methods(Static, Access=private)
 
     end
 
+    function flds=space_fun(flds,n,sep,alignChar)
+        col=max(cellfun(@(x) size(x,2), flds))+n;
+        if strcmp(alignChar,'left')
+            for i = 1:length(flds)
+                space=repmat(' ',1, col-size(flds{i}, 2));
+                flds{i}=[flds{i} sep space];
+            end
+        elseif strcmp(alignChar,'right')
+            for i = 1:length(flds)
+                space=repmat(' ',1, col-size(flds{i}, 2));
+                flds{i}=[space flds{i} sep];
+            end
+
+        else
+            inds=cellfun(@(x) find(x==alignChar,1,'first'),flds);
+            m=max(inds)
+            for i = 1:length(flds)
+                nrep=m-inds(i);
+                nrep2=col-size(flds{i},2)-nrep;
+                space1=repmat(' ',1, nrep);
+                space2=repmat(' ',1, nrep2);
+                flds{i}=[ space1 flds{i} sep space2 ];
+            end
+        end
+    end
 
 
 
