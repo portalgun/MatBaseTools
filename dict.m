@@ -173,6 +173,12 @@ methods
         out=cellfun(@(x) isequal(x,val),obj.vals);
     end
 %% MODIFY
+    function rename(obj,name,newName)
+        val=obj.map(name);
+        obj.map=remove(obj.map,name);
+        obj.map(newName)=val;
+        obj.order{ismember(obj.order,name)}=newName;
+    end
     function out=rmfield(obj,varargin)
 
         bCopy=false;

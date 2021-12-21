@@ -30,6 +30,7 @@ properties(Hidden)
     bCellHeader
     bTemplate
     bSubplate
+    bLet
 
 
     hostname
@@ -225,15 +226,21 @@ methods(Access=?Px)
             bTwice=false;
         end
         vals=obj.vals;
-        ind=~cellfun(@ischar,vals);
+        ind=~cellfun(@(x) ischar(x), vals);
         if all(ind)
             vals=repmat({''},size(ind));
         else
-            vals{ind}='';
+            vals(ind)=repmat({''},sum(ind),1);
         end
         if bTwice
             [out,mtch]=cellfun(@(x) regexp(x,re,'tokens','match'),vals,'UniformOutput',false);
 
+            if all(cellfun(@isempty,mtch))
+                gvars=[];
+                gvarsc=[];
+                spl=[];
+                return
+            end
 
             m=max(cellfun(@numel,out));
             out=cellfun(@(x) [x{:} repmat({''},1,m-numel(x))], out,'UniformOutput',false);
@@ -258,7 +265,7 @@ methods(Access=?Px)
             m=max(cellfun(@numel,out));
             out=cellfun(@(x) [x{:} repmat({''},1,m-numel(x))], out,'UniformOutput',false);
             out=vertcat(out{:});
-            [gvars,~,gvarsc]=unique(out,'rows');
+            [gvars,~,gvarsc]=unique(out);
             gvarsc=reshape(gvarsc,size(out));
         end
     end
@@ -273,7 +280,14 @@ methods(Access=?Px)
                 continue
             end
 
-            obj.vals(bind)=strrep(obj.vals(bind),gvars{b},gvals{b});
+
+            if isnumeric(gvals{b})
+                gv=Num.toStr(gvals{b});
+                obj.vals(bind)=strrep(obj.vals(bind),gvars{b},gv);
+                obj.vals(bind)=cellfun(@Cfg.parseVal,obj.vals(bind),'UniformOutput',false);
+            else
+                obj.vals(bind)=strrep(obj.vals(bind),gvars{b},gvals{b});
+            end
         end
 
     end
@@ -318,8 +332,8 @@ methods(Access=?Px)
             return
         end
         ggvars=cellfun(@(x) strrep(x,'$',''),gvars,'UniformOutput',false);
-        ggind=ismember(ggvars,obj.keys);
-        gvals(ggind)=obj.keys(ismember(obj.keys,ggvars));
+        ggind=ismember(ggvars,obj.keys) & ~cellfun(@isempty,ggvars);
+        gvals(ggind)=obj.vals(cellfun(@(x) find(ismember(obj.keys,x) & obj.lvls==0),ggvars(ggind)));
         if isempty(gvals)
             return
         end
@@ -342,12 +356,12 @@ methods(Access=?Px)
         vals=obj.vals;
         [gvars,gvarsc,vars]=obj.meta_get_fun(re,true);
         %gvars=regexprep(gvars,'([()./])','\\$1');
-        if isempty(vars)
+        if isempty(gvars)
             return
         end
         ind=~cellfun(@isempty,vars(:,2));
         vars(ind,2:3)=fliplr(vars(ind,2:3));
-        prj=getenv('PX_CUR_PRJ_NAME');
+        prj=builtin('getenv','PX_CUR_PRJ_NAME');
         if isempty(prj)
             % TODO todo USE relative and abolute paths
         end
@@ -358,7 +372,7 @@ methods(Access=?Px)
         vars=vars(:,1);
 
 
-        proot=getenv('PX_PRJS_ROOT');
+        proot=builtin('getenv','PX_PRJS_ROOT');
         prjDirs=strcat(proot,prjs,filesep);
         gvals=cell(max(gvarsc),1);
         for i = 1:length(vars)
@@ -400,7 +414,7 @@ methods(Access=?Px)
         if isempty(gvars)
             return
         end
-        gvals=cellfun(@(x) getenv(strrep(x,'$$','')), gvars,'UniformOutput',false);
+        gvals=cellfun(@(x) builtin('getenv',strrep(x,'$$','')), gvars,'UniformOutput',false);
         obj.gvars=gvars;
         obj.gvals=gvals;
         obj.meta_set_fun(gvars,gvarsc,gvals,'global');
@@ -432,8 +446,8 @@ methods(Access=?Px)
             end
 
             obj.vals{hind}=dict(true,...
-                                obj.keys(bind & ~obj.bTemplate),...
-                                obj.vals(bind & ~obj.bTemplate));
+                                obj.keys(bind & ~obj.bTemplate & ~obj.bLet),...
+                                obj.vals(bind & ~obj.bTemplate & ~obj.bLet));
 
             % ZERO
             if ~isempty(v)
@@ -443,8 +457,8 @@ methods(Access=?Px)
         obj.template_fun(1);
 
         obj.Options=dict(true, ...
-                         obj.keys(c==1 & ~obj.bTemplate), ...
-                         obj.vals(c==1 & ~obj.bTemplate) ...
+                         obj.keys(c==1 & ~obj.bTemplate & ~obj.bLet), ...
+                         obj.vals(c==1 & ~obj.bTemplate & ~obj.bLet) ...
                                  );
 
     end
@@ -518,6 +532,9 @@ methods(Access=?Px)
 
         obj.bTemplate=~startsWith(obj.keys,'@') & contains(obj.keys,'@') & obj.bHeader;
         obj.bSubplate=contains(obj.keys,'.') & obj.bHeader;
+
+        obj.bLet=Str.RE.ismatch(obj.keys,'^ *let +')';
+        obj.keys=regexprep(obj.keys,'^ *let +','');
 
 
 

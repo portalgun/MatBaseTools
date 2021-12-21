@@ -48,6 +48,8 @@ methods(Static)
 
         hash=DataHash(S);
     end
+    function nArgOut()
+    end
     function obj2=cast(obj1,obj2)
         if ischar(obj2)
             obj2=eval([obj2 '();']);

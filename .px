@@ -1,1 +1,16 @@
-bAutoCompile=1
+mex
+    feature_list.cpp=0
+    home_cpp.cpp
+    isinstalled_cpp.cpp
+    which_cpp.cpp
+    whoami_cpp.cpp
+    win
+        hostname_win32_cpp.cpp
+        issymlink_win32_cpp.cpp
+        ln_win32_cpp.cpp
+        readlink_win32_cpp.cpp
+    unix
+        hostname_unix_cpp.cpp
+        issymlink_unix_cpp.cpp
+        ln_unix_cpp.cpp
+        readlink_unix_cpp.cpp

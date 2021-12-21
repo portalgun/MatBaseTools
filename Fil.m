@@ -128,7 +128,7 @@ methods(Static)
 
 %% TEMP
     function fname=tmpName(name)
-        dire=Dir.parse(Env.var('TMP'));
+        dire=Dir.parse(getenv('TMP'));
         dt=DataHash(datetime);
         fname=[dire 'tmp_' dt '.m'];
     end
@@ -574,7 +574,7 @@ methods(Static, Access=private)
                 ext='.tmp';
             end
         end
-        dire=Dir.parse(Env.var('TMP'));
+        dire=Dir.parse(getenv('TMP'));
         re=['tmp[0-9]{' num2str(n) '}' '\' ext];
         frmt=[dire 'tmp' '%0' num2str(n) 'd' ext];
         matches=Dir.reFiles(dire,re);

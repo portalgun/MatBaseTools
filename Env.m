@@ -5,6 +5,15 @@ properties
     os
     prjs
     vars
+    seen=cell(0,2)
+end
+properties(Constant)
+    % $$
+    eRE='\$\$[A-Z]+([A-Z_]+[A-Z]*)*'
+    % @
+    mRE=['@[A-Za-z][A-Za-z0-9]*[^/' char(123) ']*'] % 123 = left bracket % XXX make more robust
+    % @{}
+    mmRE='@[A-Z]+\{.*\}'
 end
 methods(Access=private)
     function obj=Env(configDir,prjs,hostname,os)
@@ -48,13 +57,51 @@ methods(Access=private)
             types=[types obj.hostname];
         end
 
-        Opts=struct();
+        Opts=dict(true);
         for i = 1:length(scopes)
         for j = 1:length(types)
             Opts=obj.read_fun(obj.configDir,Opts,scopes{i},types{j});
         end
         end
 
+    end
+    function Opts=read_fun(obj,dire,Opts1,scope,type)
+        if ~isempty(type)
+            fname=[dire scope '.' type '.config'];
+        else
+            fname=[dire scope '.config'];
+        end
+
+        if Fil.exist(fname)
+            ind=ismember(obj.seen(:,1),fname);
+            if any(ind)
+                Opts2=copy(obj.seen(ind,2));
+            else
+                Opts2=Cfg.read(fname);
+                obj.seen{end+1,1}=fname;
+                obj.seen{end,2}=Opts2;
+            end
+
+            % RENAME PRJ VARS
+            flds=fieldnames(Opts2);
+            if ~strcmp(scope,'ENV')
+                for i = 1:length(flds)
+                    fld=flds{i};
+                    if Env.is_prj_var({fld})
+                        Opts2.rename(fld,Env.prj_str(scope,fld));
+                    end
+                end
+            end
+            if (isempty(Opts1) && isempty(Opts2)) || isempty(Opts2)
+                Opts=Opts1;
+            elseif isempty(Opts1)
+                Opts=Opts2;
+            else
+                Opts=Opts2.mergePref(Opts1,false,true);
+            end
+        else
+            Opts=Opts1;
+        end
     end
 end
 methods(Access = ?Cfg)
@@ -80,37 +127,15 @@ methods(Access = ?Cfg)
     end
 end
 methods(Static, Access=private)
-    function Opts=read_fun(dire,Opts1,scope,type)
-        if ~isempty(type)
-            fname=[dire scope '.' type '.config'];
-        else
-            fname=[dire scope '.config'];
-        end
-
-        if Fil.exist(fname)
-            Opts2=Cfg.read(fname);
-
-            % RENAME PRJ VARS
-            flds=fieldnames(Opts2);
-            if ~strcmp(scope,'ENV')
-                for i = 1:length(flds)
-                    fld=flds{i};
-                    if Env.is_prj_var(fld)
-                        Opts2=Struct.rename(Opts2,fld,Env.prj_str(scope,fld));
-                    end
-                end
-            end
-
-            Opts=Struct.combinePref(Opts2,Opts1);
-        else
-            Opts=Opts1;
-        end
-    end
     function out=is_prj_var(fld)
-        out=~all(Str.Alph.isUpper(fld));
+        out=any(cellfun(@(x) ~all(Str.Alph.isUpper(x)),fld));
     end
     function out=prj_str(prj,fld)
-        out=[Str.Alph.upper(prj) '__' Str.Alph.upper(fld)];
+        if iscell(fld)
+            out=cellfun(@(x,y) [Str.Alph.upper(x) '__' Str.Alph.upper(y)],prj,fld,'UniformOutput',false);
+        else
+            out=[Str.Alph.upper(prj) '__' Str.Alph.upper(fld)];
+        end
     end
 end
 methods(Static)
@@ -162,78 +187,230 @@ methods(Static)
         out=obj.vars;
     end
     function [out,var]=is(name)
-        var=builtin('getenv',name);
-        out=~isempty(var);
+        if iscell(name)
+            var=cellfun(@(x) builtin('getenv',x),name,'UniformOutput',false);
+            out=~cellfun(@isempty,var);
+        else
+            var=builtin('getenv',name);
+            out=~isempty(var);
+        end
     end
     function out=var(name,varargin)
-    % GET environment
-        [prj,prjDir]=Prj.name([],2);
         nameO=name;
-        if contains(name,'.')
-            spl=strsplit(name,'.');
-            prj=spl{1};
-            PRJ=[prj '.'];
-            name=spl{2};
-            prjDir=[Dir.parent(prjDir) prj filesep];
-        else
-            PRJ='';
+        bCell=iscell(name);
+        %name
+        %if iscell(name) && numel(name)==1
+        %    error
+        %end
+        if ~bCell
+            name={name};
         end
 
-        % CONVERT
+        db=dbstack('-completenames');
+        if numel(db) < 2
+            caller='';
+        else
+            caller=db(2).file;
+        end
+
+        [name,prj,prjDir,prjInd,pxInd,remInd,dotInd]=Env.get_prjs(caller,name);
         if Env.is_prj_var(name)
             name=Env.prj_str(prj,name);
         end
 
-        % IS EXPORTED?
-        [bVar,out]=Env.is(name);
+        out=repmat({''},size(name));
+        out(prjInd)=cellfun(@(x) builtin('getenv',x),name(prjInd),'UniformOutput',false);
+        out(pxInd)=cellfun(@(x) builtin('getenv',x),name(pxInd),'UniformOutput',false);
 
-        % IF NOT EXPORTED
-        if ~bVar
-
-            % READ FROM ETC CONFIG
-            [bETC,etc]=Env.is('PX_ETC');
-            if bETC
-                configDir=etc;
-                vars1=Env.read(prj,configDir);
-            end
-
-            % READ FROM LOCAL CONFIG
-            if Fil.exist([prjDir 'config'])
-                configDir=prjDir;
-                vars2=Env.read(prj,configDir);
-            end
-            if exist('vars2','var') && isfield(vars2,name)
-                out=vars2.(name);
-            elseif exist('vars1','var') && isfield(vars1,name)
-                out=vars1.(name);
-            else
-                error(['Environment variable ' name ' is not set']);
-            end
+        % XXX Unnecessary?
+        if any(remInd)
+            out=Env.etc_eval(name,prj,prjDir,out);
         end
 
+        out=Env.metaEval(out,varargin{:});
+        if ~bCell && numel(out)==1
+            out=out{1};
+        elseif ~bCell && numel(out)~=1
+            error('')
+        end
+    end
+
+    function OUT=metaEval(in,varargin)
         % META PARAM REGEXP
-        % $$
-        eRE='\$\$[A-Z]+([A-Z_]+[A-Z]*)*';
-        % @
-        mRE=['@[A-Za-z][A-Za-z0-9]*[^/' char(123) ']*']; % 123 = left bracket % XXX make more robust
-        % @{}
-        mmRE='@[A-Z]+\{.*\}';
+        eRE=Env.eRE;
+        mRe=Env.mRE;
+        mmRE=Env.mmRE;
 
 
         % GET METAPARAMS BY TYPE
-        eParams=Str.RE.match(out,eRE);
-        mmParams=Str.RE.match(out,mmRE);
-        tmp=strrep(out,mmParams,repmat('0',1,length(mmParams)));
+        eParams=regexp(in,Env.eRE,'match');
+        eParams=cellfun(@(x) [x{:}],eParams,'UniformOutput',false);
+        eEmpty=cellfun(@isempty,eParams);
+        eParams(eEmpty)=repmat({''},sum(eEmpty),1);
+
+        mmParams=regexp(in,Env.mmRE,'match');
+        mmParams=cellfun(@(x) [x{:}],mmParams,'UniformOutput',false);
+        mmEmpty=cellfun(@isempty,mmParams);
+        mmParams(mmEmpty)=repmat({''},sum(mmEmpty),1);
+        %mmParmas(~mmGd)=repmat({''},sum(~mmGd),1);
+
+        tmp=repmat({''},size(mmParams));
+        gd=~cellfun(@isempty,in);
+        tmp(gd)=cellfun(@(x,y) strrep(x,y,repmat('0',1,length(y))),in(gd),mmParams(gd),'UniformOutput',false);
+        %tmp=strrep(out(mmGd),mmParams(mmGd),repmat('0',1,length(mmParams)));
         tmp=strrep(tmp,'\@','__AT_REPMAN__');
-        mParams=Str.RE.match(tmp,mRE);
+        mptmp=regexp(tmp,Env.mRE,'match');
+        mParams=cellfun(@(x) [x{:}],mptmp,'UniformOutput',false);
+        mEmpty=cellfun(@isempty,mParams);
+        mParams(mEmpty)=repmat({''},sum(mEmpty),1);
         mParams=strrep(mParams,'__AT_REPMAN__','@');
 
+        OUT=in;
+        for i = 1:length(eParams)
+            if mEmpty(i) && mmEmpty(i) && eEmpty(i)
+                continue
+            end
+            OUT{i}=Env.meta_fun_ind(in{i},mmParams{i},mParams{i},eParams{i},tmp{i},varargin{:});
+        end
+    end
+end
+methods(Static, Access=protected)
+    function [name,prj,prjDir,prjInd,pxInd,remInd,dotInd]=get_prjs(caller,name)
+        prjRoot=builtin('getenv','PX_PRJS_ROOT');
+        dires=cellfun(@(x) Str.Alph.upper(x),Dir.dirs(prjRoot),'UniformOutput',false);
+
+        prj=repmat({''},size(name));
+        prjDir=repmat({''},size(name));
+
+        prjInd=Str.RE.ismatch(name,'^[A-Z0-9]*__.*');
+        if any(prjInd)
+
+            m=regexp(name(prjInd),'^([A-Z0-9]*)__','tokens');
+            prj(prjInd)=cellfun(@(x) [x{:}{:}],m,'UniformOutput',false);
+            prjDir(prjInd)=dires(cellfun(@(x) find(ismember(dires,x)),prj(prjInd)));
+            prjDIr(prjInd)=cellfun(@Dir.parse,prjDir(prjInd),'UniformOutput',false);
+
+        end
+        pxInd=Str.RE.ismatch(name,'^PX_.*');
+        if any(pxInd)
+            prjDir(pxInd)='';
+
+        end
+        remInd=~pxInd & ~prjInd;
+        if any(remInd)
+            [~,p]=VE.isInPrj(caller);
+            if ~isempty(p)
+                prj(remInd)=repmat({p},sum(remInd),1);
+                prjDir(remInd)=strcat(prjRoot,prj(remInd),filesep);
+            end
+        end
+
+        dotInd=contains(name,'.');
+        if any(dotInd)
+            spl=cellfun(@(x) strsplit(x,'.'),name(dotInd),'UniformOutput',false);
+            if numel(spl) == 1
+                spl=[spl{:}];
+            else
+                spl=cellfun(@(x) [x{:}],spl,'UniformOutput',false);
+            end
+            prj(dotInd)=spl(:,1);
+            prjDir(dotInd)=strcat(prjRoot,prj,filesep);
+            name(dotInd)=spl(:,2);
+        end
+
+    end
+    function out=etc_eval(name,prj,prjDir,out)
+
+        % IS EXPORTED?
+        [bVar,out]=Env.is(name);
+
+        if all(bVar)
+            return
+        end
+        name=name(~bVar);
+        prj=prj(~bVar);
+        prjDir=prjDir(~bVar);
+
+        % IF NOT EXPORTED
+
+        % READ FROM ETC CONFIG
+        vars1=Env.read_config(prj,prjDir);
+        vars2=Env.read_etc(prj);
+        out(~bVar)=Env.apply_fun(vars1,vars2,name,out(~bVar));
+
+    end
+    function out=apply_fun(vars1,vars2,name,in)
+        bEmpty1=isempty(vars1);
+        bEmpty2=isempty(vars2);
+        if bEmpty1 && bEmpty2
+            return
+        end
+        if ~bEmpty1
+            out=cellfun(@Env.apply_fun_ind,name,in,vars1,'UniformOutput',false);
+        end
+        if ~bEmpty2
+            out=cellfun(@(x,y) Env.apply_fun_ind(x,y,vars2), name,in,'UniformOutput',false);
+        end
+
+    end
+    function out=apply_fun_ind(name,in,vars);
+        flds=fieldnames(vars);
+        if ismember(name,flds);
+            out=vars.(name);
+        else
+            out=in;
+        end
+    end
+    function vars=read_config(prj,prjDir)
+        configDir=builtin('getenv','PX_ETC');
+        vars=[];
+        re=strcat(prjDir,prj,'(\.(cfg|config))?');
+        bInd=cellfun(@Fil.exist,strcat(prjDir,'.px'));
+        % READ FROM LOCAL CONFIG
+        if ~any(bInd)
+            return
+        end
+        files=cell(size(prjDir));
+        gd=cellfun(@(x,y) ~isempty(x) && ~isempty(y) && Dir.exist(y),prj,prjDir);
+        if ~any(gd)
+            return
+        end
+        files(gd)=strcat(prjDir(gd),'.px');
+        gd=cellfun(@Fil.exist,files) & gd;
+        if ~any(gd)
+            return
+        end
+        [u,j,c]=unique(prj(gd));
+        pd=prjDir(gd);
+        varsU=cellfun(@(x) Env.read(x,configDir),u,'UniformOutput',false);
+        %varsU=cellfun(@(x,y) Env.read(x,y),u,configDir,'UniformOutput',false);
+        varsNE=cell(size(files));
+        for i = 1:max(c);
+            bind=c==i;
+            varsNE(bind)=varsU(i);
+        end
+        vars=cell(size(prjDir));
+        vars(gd)=varsNE;
+    end
+
+    function vars=read_etc(prj)
+        [bETC,configDir]=Env.is('PX_ETC');
+        if bETC
+            vars=Env.read([],configDir);
+        else
+            vars=[];
+        end
+    end
+    function out=meta_fun_ind(out,mmParams,mParams,eParams,tmp,varargin)
+
+
         % GET ORDER OF DIFF META PARAM TYPES
-        [se,ee]=regexp(out,eRE);
-        [smm,emm]=regexp(out,mmRE);
-        [sm,em]=regexp(tmp,mRE);
+        [se,ee]=regexp(out,Env.eRE);
+        [smm,emm]=regexp(out,Env.mmRE);
+        [sm,em]=regexp(tmp,Env.mRE);
         [sAll,ind]=sort([se smm sm]);
         if isempty(sAll)
+            bNotCell=true;
             out=strrep(out,'\@','@');
             return
         end
@@ -341,6 +518,9 @@ methods(Static)
 
         end
 
+        if iscell(out) && numel(out)==1
+            out=out{1};
+        end
         if ~isempty(Dir.highest(out))
             out=Dir.parse(out);
         end

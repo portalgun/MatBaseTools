@@ -7,6 +7,15 @@ methods(Static)
     function out=exist(thing)
         out=(exist(thing,'file')==2 || exist(thing,'file')==7);
     end
+    function out=abs(thing)
+        if isunix && ~startsWith(thing,'/')
+            out=[pwd filesep thing];
+        elseif ispc && ~Str.RE.ismatch(thing,'[A-Z]:\')
+            out=[pwd fielsep thing];
+        else
+            out=thing;
+        end
+    end
     function out=isequal(dire1,dire2);
         if isunix()
             dire1=Dir.resolve(dire1);
@@ -15,20 +24,24 @@ methods(Static)
         end
     end
     function out=resolve(dire)
-        if isunix()
-            if ~startsWith(dire,filesep)
-                dire=[pwd filesep dire];
-            end
-            old=pwd;
-            cl=onCleanup(@() builtin('cd',old));
-            dire=Dir.highest(dire);
-            builtin('cd',dire);
-            [out,bSuccess]=Sys.run(['pwd -P']);
-            if ~bSuccess
-                error(out);
-            end
-            out=out{1};
+
+        if (isunix && ~startsWith(dire,filesep)) || (ispc && ~Str.RE.ismatch(dire,'^[A-Z]:.*'));
+            dire=[pwd filesep dire];
         end
+
+        old=pwd;
+        cl=onCleanup(@() builtin('cd',old));
+        dire=Dir.highest(dire);
+        builtin('cd',dire);
+        if isunix()
+            [out,bSuccess]=Sys.run(['pwd -P']);
+        else
+            [out,bSuccess]=Sys.run(['echo %cd%']);
+        end
+        if ~bSuccess
+            error(out);
+        end
+        out=out{1};
     end
 %% FIND
     function out= find(dire,re,depth,ftype)
