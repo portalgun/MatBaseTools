@@ -140,7 +140,7 @@ methods(Static)
         [name]=Fil.get_largest_tmp_(ext);
         delete(name);
     end
-    function name=mktmp(ext,contents)
+    function [name,CL]=mktmp(ext,contents)
         if nargin < 2 || isempty(ext)
             contents=[];
             if nargin < 1
@@ -149,9 +149,12 @@ methods(Static)
         end
         [~,name]=Fil.get_largest_tmp_(ext);
         if ~isempty(contents)
-            Fil.write(contents);
+            Fil.write(name,contents);
         else
             Fil.touch(name);
+        end
+        if nargout > 1
+            CL=onCleanup(@() delete(name));
         end
 
     end
@@ -367,7 +370,7 @@ methods(Static)
         end
     end
     function varargout=write(fname,text,bOverwrite)
-        if ~exist('bOverwrite','var') || isempty(bOverwerite)
+        if nargin < 3 || isempty(bOverwrite)
             bOverwrite=false;
         end
         if exist(fname,'file') && ~bOverwrite
