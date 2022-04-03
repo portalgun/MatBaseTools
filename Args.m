@@ -738,18 +738,24 @@ methods(Access=private)
         end
     end
     function out_as_dict(obj);
-        out=obj.IP.Results;
-        flds=fieldnames(out);
-        obj.OUT=dict(true);
-        for i = 1:length(flds)
-            obj.set_result_f('OUT',flds{i});
+        obj.out_as_cell();
+        obj.OUT=dict(true,obj.OUT(:,1),obj.OUT(:,2));
+        if isempty(obj.OUTUM)
+            obj.OUTUM=dict(true);
+        else
+            obj.OUTUM=dict(true,obj.OUTUM(:,1),obj.OUTUM(:,2));
         end
 
-        flds=fieldnames(obj.IP.Unmatched);
-        obj.OUTUM=dict(true);
-        for i = 1:length(flds)
-            obj.OUTUM{obj.dictf(flds{i})}=obj.IP.Unmatched.(flds{i});
-        end
+        %out=obj.IP.Results;
+        %flds=fieldnames(out);
+        %obj.OUT=dict(true);
+        %for i = 1:length(flds)
+        %    obj.set_result_f('OUT',flds{i});
+        %end
+
+        %flds=fieldnames(obj.IP.Unmatched);
+        %obj.OUTUM=dict(true);
+        
     end
     function out_as_cell(obj)
         obj.out_as_struct();
