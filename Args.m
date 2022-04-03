@@ -1,11 +1,24 @@
 classdef Args < handle
-%%% Arg.parse(PARENT, P, varargin)
+%% TODO
+%%   - DON'T ALLOW DUPLICATES
+%% P columns
+%%  1 - names
+%%        main name = 1
+%%        aliases 2
+%%        'opts.fld.val' -> struct
+%%  3 - tests/nested
+%%        struct => nestedP
+%%        char starting with ! => nested P
+%%        char => function
+%%        [min,[inc,]max]
+%%        {values}
+%%  4 - flags
+%%        numbers = groups
 properties
    nPosArgs
-   dictf=containers.Map
-   dictr=containers.Map
-   IP
-   ARGS=containers.Map
+   dictf
+   dictr
+   ARGS
    OBJ
    objName
    Opts
@@ -16,29 +29,56 @@ properties
    StructExpand=true
    errors={}
    bNotArgIn=true
+   nested
+   groups
+   uGroups
+
+   IP
+   Toggler
 
    bDefault
    bTest=false
+   bFlag=false
 
    OUT=struct
    OUTUM
 end
+properties(Hidden)
+   toggles
+end
 methods(Static)
 %%% MAIN INTERFACES
-    function out=parse(parent,P,varargin)
+    function [out,obj]=parse(parent,P,varargin)
         obj=Args(parent,P,struct(),varargin);
         out=obj.OUT;
+        if nargout >= 2
+            obj.get_toggler();
+        end
     end
-    function [out,unmatched]=parseLoose(parent,P,varargin)
+    function [out,unmatched,obj]=parseLoose(parent,P,varargin)
         Opts=struct('KeepUnmatched',true);
         obj=Args(parent,P,Opts,varargin);
         out=obj.OUT;
         unmatched=obj.OUTUM;
+        if nargout >= 3
+            obj.get_toggler();
+        end
     end
-    function [out]=parseIgnore(parent,P,varargin)
+    function [out,obj]=parseIgnore(parent,P,varargin)
         Opts=struct('KeepUnmatched',false,'IgnoreUnmatched',true);
         obj=Args(parent,P,Opts,varargin);
         out=obj.OUT;
+        if nargout >= 2
+            obj.get_toggler();
+        end
+    end
+    function [out,obj]=parseKeep(parent,P,varargin)
+        Opts=struct('KeepUnmatched',true,'IgnoreUnmatched',true);
+        obj=Args(parent,P,Opts,varargin);
+        out=obj.OUT;
+        if nargout >= 2
+            obj.get_toggler();
+        end
     end
     function out=mergePref(obj,varargin)
         ARGS=varargin;
@@ -162,6 +202,38 @@ methods(Static)
         end
         vars=stuct(varargin{:});
     end
+    function [objs,args]=splitMeta(str)
+        re='[@\.]([A-Za-z0-9_]+)';
+        objs=regexp(str,re,'tokens');
+        objs=cellfun(@(x) x{1},objs,'UniformOutput',false);
+
+        re2='[(,] *([A-Za-z0-9_]+)';
+        args=regexp(str,re2,'tokens');
+        args=cellfun(@(x) x{1},args,'UniformOutput',false);
+    end
+end
+%%% TOGGLER INTERFACE
+methods
+    function setParent(obj,Parent)
+        obj.Toggler.Parent=Parent;
+    end
+    function [exitflag,msg]=set(obj,name,val);
+        if nargout > 1
+            [exitflag,msg]=obj.Toggler.set(name,val);
+        else
+            obj.Toggler.set(name,val);
+        end
+    end
+    function [out,exitflag,msg]=inc(obj,name,n,bWrap);
+        if nargin < 4
+            bWrap=[];
+        end
+        if nargout > 1
+            [out,exitflag,msg]=obj.Toggler.inc(name,n,bWrap);
+        else
+            out=obj.Toggler.inc(name,n,bWrap);
+        end
+    end
 end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 methods(Access=private)
@@ -171,6 +243,10 @@ methods(Access=private)
         else
             obj.Opts=Opts;
         end
+        %XXX weird persisentent behavior matlab
+        obj.dictr=containers.Map;
+        obj.dictf=containers.Map;
+        obj.ARGS=containers.Map;
 
         obj.OBJ=OBJ;
         obj.P=P;
@@ -208,12 +284,72 @@ methods(Access=private)
         end
         obj.parse_own();
         obj.parse_p();
+        obj.expand_structs();
         obj.parse_main();
+        obj.parse_nested();
+        obj.IP.Unmatched
+        obj.parse_groups();
         obj.convert_output();
         if ~obj.KeepUnmatched && numel(fieldnames(obj.OUTUM)) > 0
             flds=fieldnames(obj.OUTUM);
             error(['Has Unmatched params:' newline '  ' strjoin(flds,[newline '  '])])
         end
+    end
+    function expand_structs(obj)
+        dkees=keys(obj.dictr);
+        nest=obj.nested(cellfun(@(x) ~isempty(x) && ischar(x),obj.nested(:,2)),:);
+        [~,inds]=unique(nest(:,2));
+        okees=nest(inds,2);
+
+        bDICT=isa(obj.ARGS,'dict');
+
+        FLDS=keys(obj.ARGS);
+        for i = 1:length(FLDS)
+            fld=FLDS{i};
+            if ismember(fld,dkees)
+                continue
+            end
+            if bDICT
+                val=obj.ARGS{fld};
+            else
+                val=obj.ARGS(fld);
+            end
+            bDict=isa(val,'dict');
+            bStruct=isa(val,'struct');
+            if bStruct
+                flds=cellfun(@(x) [fld x],Struct.getFields(val),'UniformOutput',false);
+                newflds=cellfun(@(x) strjoin(x,'.'),flds,'UniformOutput',false);
+                newvals=cellfun(@(x) getfield(val,x{2:end}),flds,'UniformOutput',false);
+                bMem =cellfun(@(x) ismember(x,dkees),newflds);
+                bMemS=cellfun(@(x) ismember(x{1},okees),flds);
+            elseif bDict
+                TODO
+            else
+                continue
+            end
+
+            if ~any(bMem) && ~any(bMemS)
+                continue
+            end
+            bMemS
+            fld
+            newflds
+
+            if bDICT
+                obj.ARGS=remove(obj.ARGS,fld); % XXX CHECK
+                for j = 1:length(newflds)
+                    obj.ARGS{newflds{j}}=newvals{j};
+                end
+            else
+                obj.ARGS=remove(obj.ARGS,fld);
+                for j = 1:length(newflds)
+                    obj.ARGS(newflds{j})=newvals{j};
+                end
+            end
+            keys(obj.ARGS)
+        end
+
+
     end
     function convert_output(obj)
         if isempty(obj.OBJ) && isnumeric(obj.OBJ)
@@ -276,25 +412,91 @@ methods(Access=private)
             if size(obj.P)>=3
                 obj.bTest=true;
             end
+            if size(obj.P)>=4
+                obj.bFlag=true;
+            end
         end
+        obj.nested=cell(size(obj.P,1),2);
+        obj.toggles=cell(size(obj.P,1),2);
+        obj.groups=cell(size(obj.P,1),1);
         for i = 1:size(obj.P,1);
             if obj.bDefault
                 default=obj.P(i,2);
             else
                 default=[];
             end
-            if obj.bTest
-                %obj.P{i,3}
-                test=Args.parse_flags(obj.P{i,3});
-            else
-                test=@Args.isTrue;
-            end
-            %if strcmp(obj.P{i,1},'cArg3')
-            %    test
-            %end
+
+            %obj.P{i,1}
             f=['f' num2str(i)];
-            obj.dictf(f)=obj.P{i,1};
-            obj.dictr(obj.P{i,1})=f;
+            name=obj.P{i,1};
+            if iscell(name)
+                %% HANDLE ALIASES
+                obj.dictf(f)=name{1};
+                for i = 1:length(name)
+                    obj.dictr(name{i})=f;
+                end
+            else
+                obj.dictf(f)=name;
+                obj.dictr(name)=f;
+            end
+
+            %obj.P{i,3}
+            if obj.bTest
+                T=obj.P{i,3};
+                if (ischar(T) && startsWith(T,'!')) || ( iscell(T) && size(T,2) == 3 && size(T,1) > 1 ) || isstruct(T) || isa(T,'dict')
+                    if ischar(T)
+                        cls=T(2:end);
+                        obj.nested(i,:)={name cls};
+                    else
+                        obj.nested(i,:)={name T};
+                    end
+                    test=@(x) isempty(x) || ismember(class(x),{'dict','struct'});
+                    obj.toggles(i,:)={name,test};
+                elseif isnumeric(T) && (numel(T)==2 || numel(T)==3)
+                    % min,max,inc
+                    test=@(x) x >= T(1) && x <= T(end);
+                    obj.toggles(i,:)={name,T};
+                elseif iscell(T) || (isnumeric(T) && numel(T) > 3)
+                    % list
+                    if isnumeric(T)
+                        T=num2cell(T);
+                    end
+                    test=@(x) ismember(x,T);
+                    obj.toggles(i,:)={name,T};
+                elseif regexp(T,'(is[bB]inary|islogical)(_e)?$')
+                    test=Args.parse_test(T);
+                    obj.toggles(i,:)={name,{false,true}};
+                else
+                    test=Args.parse_test(T);
+                    obj.toggles(i,:)={name,test};
+                end
+            else
+                test=@(varargin) true;
+                obj.toggles(i,:)={name,test};
+            end
+
+            %obj.P{i,4}
+            if obj.bFlag
+                F=obj.P{i,4};
+                if isnumeric(F)
+                    obj.groups{i}(end+1)=F;
+                    if ~ismember(F,obj.uGroups)
+                        obj.uGroups(end+1)=F;
+                    end
+                elseif ischar(F)
+                    for k = 1:length(F)
+                        fl=F(k);
+                        if Str.Num.is(fl)
+                            fl=str2double(fl);
+                            obj.groups{i}(end+1)=fl;
+                            if ~ismember(fl,obj.uGroups)
+                                obj.uGroups(end+1)=fl;
+                            end
+                        end
+                    end
+                end
+            end
+
             IP.addParameter(f,default,test);
         end
         obj.IP=IP;
@@ -310,6 +512,7 @@ methods(Access=private)
         args={};
         bDict=isa(obj.ARGS,'dict');
         for i = 1:length(flds)
+            bUm=false;
             if bDict
                 val=obj.ARGS{flds{i}};
             else
@@ -322,10 +525,21 @@ methods(Access=private)
                 key=['u' num2str(nUnm)];
                 obj.dictf(key)=flds{i};
                 obj.dictr(flds{i})=key;
+                bUm=true;
             end
-            if obj.bTest
-                pp=obj.P{str2double(key(2:end)),3};
-                mtch=iscell(pp) && Str.RE.ismatch(pp,'^(is)?[Cc]harcell$');
+            % TEST = pp
+            if obj.bTest && ~startsWith(key,'u')
+                try
+                    pp=obj.P{str2double(key(2:end)),3};
+                catch ME
+                    str2double(key(2:end))
+                    bUm
+                    obj.P
+                    flds{i}
+                    key
+                    rethrow(ME)
+                end
+                mtch=numel(pp) == 1 && iscell(pp) && Str.RE.ismatch(pp,'^(is)?[Cc]harcell$');
             else
                 pp=[];
                 mtch=false;
@@ -336,7 +550,7 @@ methods(Access=private)
                 val={val};
             end
             bflag=false;
-            if iscell(pp) && Str.RE.ismatch(pp,'^(is)?[Cc]el[Ss]truct') && isstruct(val)
+            if numel(pp)== 1 && iscell(pp) && Str.RE.ismatch(pp,'^(is)?[Cc]el[Ss]truct') && isstruct(val)
                 val={args};
             elseif ~iscell(pp) && (isstruct(val) || isobject(val))
                 bflag=true;
@@ -358,19 +572,148 @@ methods(Access=private)
             m=Str.RE.match(ME.message,'[uf][0-9]+');
             ind=str2double(m(2:end));
             msg=regexprep(ME.message,'[uf][0-9]+',obj.dictf(m));
-            %args{ind*2}
+            %m
             error(ME.identifier,msg);
+        end
+        obj.IP=Obj.struct(obj.IP);
+    end
+    function parse_groups(obj)
+        names=obj.P(:,1);
+        if numel(obj.uGroups) == 1 && obj.uGroups(1)==0 || isempty(obj.uGroups)
+            return
+        end
+        for i = 1:length(obj.uGroups)
+            u=obj.uGroups(i);
+            if u==0
+                continue
+            end
+            bGroup=cellfun(@(x) ismember(u,x),obj.groups);
+            if all(cellfun(@(x) ~isempty(obj.get_result(x)),names(bGroup)));
+                return
+            end
+        end
+        error('No parse groups were satisfied')
+    end
+    function parse_nested(obj)
+        umfflds=fieldnames(obj.IP.Unmatched);
+        umffldsO=umfflds;
+        umflds=cellfun(@(x) obj.dictf(x) ,umfflds,'UniformOutput',false);
+        for i = 1:length(obj.nested)
+            if isempty(obj.nested{i,1})
+                continue
+            end
+            fld=obj.nested{i,1};
+            o=obj.nested{i,2};
+            if ischar(o)
+                spl=strsplit(o,'.');
+                cls=spl{1};
+                if length(spl) >= 2
+                    meth=spl{2};
+                else
+                    meth='getP';
+                end
+                if length(spl) >= 3
+                    args=spl(3:end);
+                else
+                    args={};
+                end
+                str=[cls '.' meth '(args{:});'];
+                try
+                    p=eval(str);
+                catch ME
+                    disp(str)
+                    rethrow(ME);
+                end
+            else
+                p=o;
+                cls='';
+            end
+
+            ffld=obj.dictr(fld);
+            %opts=obj.get_result_f(ffld);
+            opts=struct();
+
+            newflds=p(:,1);
+            if ~isempty(umflds)
+                reps={''};
+                if ~isempty(cls)
+                    reps=[reps [cls '.']];
+                end
+                for j = 1:length(reps)
+                    [opts,umflds,umfflds]=obj.um_fun(newflds,umflds,umfflds,reps{j},opts);
+                    if isempty(umflds)
+                        break
+                    end
+                end
+            end
+
+            obj.IP.Unmatched
+            opts
+            out=Args.parse([],p,opts);
+            obj.set_ip_result_f(ffld,out);
+        end
+        rmflds=umffldsO(~ismember(umffldsO,umfflds));
+        if ~isempty(rmflds)
+            obj.IP.Unmatched=rmfield(obj.IP.Unmatched,rmflds);
+        end
+        obj.IP.Unmatched
+    end
+    function [opts,umflds,umfflds]=um_fun(obj,newflds,umflds,umfflds,rep,opts)
+        if ~isempty(rep)
+            newflds=strcat(rep,newflds);
+        end
+        inds=ismember(umflds,newflds);
+        if ~any(inds)
+            return
+        end
+        fld=umflds{inds};
+        fflds=umfflds{inds};
+        val=obj.IP.Unmatched.(fflds);
+        umflds(inds)=[];
+        umfflds(inds)=[];
+
+        if isstruct(opts)
+            if contains(fld,'.')
+                spl=strsplit(fld,'.');
+                opts=setfield(opts,spl{:},val);
+            else
+                opts.(fld)=val;
+            end
+        elseif isa(opts,'dict')
+            opts(fld)=val;
+        elseif iscell(opts)
+            opts{end+1}=fld;
+            opts{end+1}=val;
+        end
+    end
+    function out=get_result(obj,fld)
+        out=obj.get_result_f(obj.dictr(fld));
+    end
+    function set_result_f(obj,DEST,fld)
+        flds=strsplit(obj.dictf(fld),'.');
+        obj.(DEST)=setfield(obj.(DEST),flds{:},obj.get_result_f(fld));
+
+        %obj.OUT.(obj.dictf(flds{i}))=obj.get_result_f(flds{i});
+    end
+    function out=get_result_f(obj,fld)
+        if ismember(fld,obj.IP.UsingDefaults)
+            out=obj.IP.Results.(fld){1};
+        else
+            out=obj.IP.Results.(fld);
+        end
+    end
+    function set_ip_result_f(obj,fld,val)
+        if ismember(fld,obj.IP.UsingDefaults)
+            obj.IP.Results.(fld){1}=val;
+        else
+             obj.IP.Results.(fld)=val;
         end
     end
     function out_as_object(obj);
         out=obj.IP.Results;
         flds=fieldnames(out);
         for i = 1:length(flds)
-            if ismember(flds{i},obj.IP.UsingDefaults)
-                obj.OBJ.(obj.dictf(flds{i}))=out.(flds{i}){1};
-            else
-                obj.OBJ.(obj.dictf(flds{i}))=out.(flds{i});
-            end
+            obj.set_result_f('OBJ',flds{i});
         end
         obj.OUT=obj.OBJ;
 
@@ -385,11 +728,7 @@ methods(Access=private)
         flds=fieldnames(out);
         obj.OUT=struct();
         for i = 1:length(flds)
-            if ismember(flds{i},obj.IP.UsingDefaults)
-                obj.OUT.(obj.dictf(flds{i}))=out.(flds{i}){1};
-            else
-                obj.OUT.(obj.dictf(flds{i}))=out.(flds{i});
-            end
+            obj.set_result_f('OUT',flds{i});
         end
 
         flds=fieldnames(obj.IP.Unmatched);
@@ -403,11 +742,7 @@ methods(Access=private)
         flds=fieldnames(out);
         obj.OUT=dict(true);
         for i = 1:length(flds)
-            if ismember(flds{i},obj.IP.UsingDefaults)
-                obj.OUT{obj.dictf(flds{i})}=out.(flds{i}){1};
-            else
-                obj.OUT{obj.dictf(flds{i})}=out.(flds{i});
-            end
+            obj.set_result_f('OUT',flds{i});
         end
 
         flds=fieldnames(obj.IP.Unmatched);
@@ -421,12 +756,38 @@ methods(Access=private)
         obj.OUT=[fieldnames(obj.OUT) struct2cell(obj.OUT)];
         obj.OUTUM=[fieldnames(obj.OUTUM) struct2cell(obj.OUTUM)];
     end
+    function get_toggler(obj)
+        out=~cellfun(@isempty,obj.toggles(:,1));
+        n=sum(out);
+        if n < 1
+            return
+        end
+        names=cell(n,1);
+        T=cell(n,1);
+        vals=cell(n,1);
+        for i = 1:length(obj.toggles)
+            % XXX isint, isInt, isInt_e
+            names{i}=obj.toggles{i,1};
+            T{i}=obj.toggles{i,2};
+            if isa(obj.OUT,'dict')
+                vals{i}=obj.OUT(names{i});
+            elseif isstruct(obj.OUT)
+                vals{i}=obj.OUT.(names{i});
+            end
+        end
+        if isobject(obj.OBJ) && ~isa(obj.Obj,'Table') && ~isa(obj.Obj,'dict')
+            Parent=obj.OBJ;
+        else
+            Parent=[];
+        end
+        obj.Toggler=Toggler(names,T,vals,Parent);
+    end
 %% ERROR
     function errorOption(obj,name,bSelf)
         if nargin < 4
             bSelf=false;
         end
-        str=['Invalid option ''%s'' for ''%s.''']; %
+        str='Invalid option ''%s'' for ''%s.'''; %
         if bSelf
             typ='Argsr';
         elseif ~isempty(obj.objName)
@@ -440,7 +801,7 @@ methods(Access=private)
         if nargin < 4
             bSelf=false;
         end
-        str=['Multiple instances of ''%s'' option ''%s.''']; %
+        str='Multiple instances of ''%s'' option ''%s.'''; %
         if bSelf
             typ='Argsr';
         else
@@ -478,13 +839,29 @@ methods(Static, Access=private);
             x={x};
         end
     end
-    function test=parse_flags(test)
+    function P=get_own_p()
+        % NOTE JUST A DUMMY FOR REFERENCE
+        P={'bQuiet', false, '@Args.isBinary';
+           'KeepUnmatched', false, '@Args.isBinary';
+           'IgnoreUnmatched',false,'@Args.isBinary';
+           'CaseSensitive', true, '@Args.isBinary';
+           'StructExpand', true, '@Args.isBinary';
+           'rmFields', {}, '@iscell';
+           'objName','','@ischar';
+          };
+    end
+%%% MISC TESTS
+end
+methods(Static)
+    function test=parse_test(test)
         if isempty(test)
             test=@(x) Args.istrue;
             return
         elseif isa(test,'function_handle')
             return
         end
+        % is.(class)
+        test=regexprep(test,'^is\.(.[A-Za-z0-9]+)','isa(x,''$1'')');
         test=regexprep(test,'^(is)?([Cc]harcell|[cC]ellstruct|[Bb]inary|[iI]nt|[dD]ouble|[sS]ingle)','Args.is$2');
         test=regexprep(test,'^(struct|char|numeric|logical|cell)','is$1');
         flags=strsplit(test,'_');
@@ -497,7 +874,13 @@ methods(Static, Access=private);
             return
         end
         fInds=~logical(cumprod(~fInds));
-        test=[strjoin(flags(~fInds)) '(x)'];
+        test=strjoin(flags(~fInds));
+        if ismethod('Args',test)
+            test=['Args.' test];;
+        end
+        if ~endsWith(test,')')
+            test=[test '(x)'];
+        end
         flags=flags(fInds);
 
         for i = 1:length(flags)
@@ -526,35 +909,43 @@ methods(Static, Access=private);
         end
         test=str2func(test);
     end
-    function P=get_own_p()
-        % NOTE JUST A DUMMY FOR REFERENCE
-        P={'bQuiet', false, '@Args.isBinary';
-           'KeepUnmatched', false, '@Args.isBinary';
-           'IgnoreUnmatched',false,'@Args.isBinary';
-           'CaseSensitive', true, '@Args.isBinary';
-           'StructExpand', true, '@Args.isBinary';
-           'rmFields', {}, '@iscell';
-           'objName','','@ischar'
-          };
+    function out=isCharList(in)
+        out=ischarlist(in);
     end
-%%% MISC TESTS
-end
-methods(Static)
+    function out=ischarlist(in)
+        out=ischar(in) || Args.ischarCell(in);
+    end
     function out=isCharCell(in)
         out=Args.ischarcell(in);
     end
     function out=ischarcell(in)
         if ~iscell(in)
-            out=0;
+            out=false;
             return
         end
-        out=all(cellfun(@(x) ischar(x) & ~isempty(x),in),'all');
+        try
+            out=all(cellfun(@(x) ischar(x) & ~isempty(x),in),'all');
+        catch
+            out=all(all(cellfun(@(x) ischar(x) & ~isempty(x),in)));
+        end
     end
     function out=isCellStruct(in)
         out=iscell(in) && all(cellfun(@isstruct,in));
     end
     function out=iscellstruct(in)
         out=iscell(in) && all(cellfun(@isstruct,in));
+    end
+    function isnormal(in)
+        out=isnumeric(in) && in <= 1 && in >=0;
+    end
+    function out=isNormal(in)
+        out=Arg.isnormal(in);
+    end
+    function out=isOptions(in)
+        out=isoptions(in);
+    end
+    function out=isoptions(in)
+        out=ismember(class(in),{'dict','struct'});
     end
     function out =isBinary(in)
         out=Args.isbinary(in);
@@ -671,6 +1062,170 @@ methods(Static, Hidden)
         parseOpts=struct('KeepUnmatched',false);
         % UNMATCHED
         [OUT,UM]=Args.parse(dict(),P,parseOpts,vargARGS{:})
+    end
+    function test_groups()
+        P={ ...
+            'posXYZm',     [],'','1';
+            'vrs',         [],'',2;
+            'vrg',         [],'',2;
+            'posXYpix',    [],'',3;
+            'los',         [],'',4;
+            'depthC',      [],'',4;
+            'A',           [],'',0;
+            'B',           [],'',0;
+        };
+        1
+        opts=struct();
+        opts.posXYZm=[1 2 3];
+        Args.parse([],P,opts);
+
+        2
+        opts.vrs=0;
+        Args.parse([],P,opts);
+
+        3
+        opts=rmfield(opts,'posXYZm');
+        try
+            Args.parse([],P,opts);
+        catch ME
+            disp(ME.message)
+        end
+
+        4
+        P={...
+            'A',           [],'',0;
+            'B',           [],'',0;
+        };
+        Args.parse([],P,struct());
+    end
+    function test_aliases()
+        P={ ...
+            {'XYZm','posXYZm'},     [],'';
+            'vrs',         [],'';
+            'vrg',         [],'';
+            'posXYpix',    [],'';
+            'los',         [],'';
+            'depthC',      [],'';
+            'A',           [],'';
+            'B',           [],'';
+        };
+        1
+        opts=struct();
+        opts.posXYZm=[1 2 3];
+        out=Args.parse([],P,opts);
+        out
+
+        2
+        opts=struct();
+        opts.XYZm=[2 3 4];
+        out=Args.parse([],P,opts);
+        out
+
+        3
+        opts.posXYZm=[1 2 3];
+        opts.XYZm=[2 3 4];
+        out=Args.parse([],P,opts);
+        out
+    end
+    function test_struct_name()
+        P={ ...
+            {'fld1.fld2.fld3','fld3'}, 3,'';
+            'vrs',         [],'';
+            'vrg',         [],'';
+            'posXYpix',    [],'';
+            'los',         [],'';
+            'depthC',      [],'';
+            'A',           [],'';
+            'B',           [],'';
+        };
+
+        1
+        opts=struct;
+        out=Args.parse([],P,opts);
+        out.fld1.fld2.fld3;
+
+        2
+        opts=struct;
+        opts.fld1.fld2.fld3=2;
+        out=Args.parse([],P,opts);
+        out.fld1.fld2.fld3
+
+        3
+        opts=struct;
+        opts.fld3=3;
+        out=Args.parse([],P,opts);
+        out.fld1.fld2.fld3
+    end
+    function test_toggler()
+        P={ ...
+            'LorRorC', [],   {'L','R','C'};
+            'slider', [],    [0 .1 1];
+            'bFlag',  [],    'isbinary';
+        };
+        opts.LorRorC='L';
+        opts.slider=.5;
+        opts.bFlag=0;
+        [out,obj]=Args.parse([],P,opts);
+
+        % val=obj.inc('slider',2)
+        % val=obj.inc('slider',-1)
+        % val=obj.inc('slider',20)
+        % val=obj.inc('slider',-20)
+        % val=obj.inc('slider',3)
+
+        val=obj.inc('LorRorC',1)
+        val=obj.inc('LorRorC',2)
+        val=obj.inc('LorRorC',-1)
+        val=obj.inc('LorRorC',-3)
+        val=obj.inc('LorRorC',-2)
+
+        %val=obj.inc('bFlag',1)
+        %val=obj.inc('bFlag',-1)
+        %val=obj.inc('bFlag',-1)
+    end
+    function test_nested()
+        1
+        P={ ...
+            'LorRorC', [],   {'L','R','C'};
+            'slider',  [],    [0 .1 1];
+            'bFlag',   [],    'isbinary';
+            'Opts',    [],    '!TestingObj';
+        };
+        opts.LorRorC='L';
+        opts.slider=.5;
+        opts.bFlag=0;
+        opts.prop1='A';
+        %opts.TestingObj
+        [out]=Args.parse([],P,opts);
+
+        2
+        P={ ...
+            'LorRorC', [],   {'L','R','C'};
+            'slider',  [],    [0 .1 1];
+            'bFlag',   [],    'isbinary';
+            'Opts',    [],    TestingObj.getP();
+        };
+        opts.LorRorC='L';
+        opts.slider=.5;
+        opts.bFlag=0;
+        opts.prop1='A';
+        %opts.TestingObj
+        [out]=Args.parse([],P,opts);
+        out.Opts
+
+        3
+        P={ ...
+            'LorRorC', [],   {'L','R','C'};
+            'slider',  [],    [0 .1 1];
+            'bFlag',   [],    'isbinary';
+            'Opts',    [],    '!TestingObj';
+        };
+        opts.LorRorC='L';
+        opts.slider=.5;
+        opts.bFlag=0;
+        opts.TestingObj.prop1='A';
+        %opts.TestingObj
+        [out]=Args.parse([],P,opts);
     end
 end
 end
