@@ -493,7 +493,7 @@ methods(Static)
         Fil.rewrite(fname,lines);
     end
     function [out,varargout]=contains(fname,text)
-        Px=lines.cell(fname);
+        lines=Fil.cell(fname);
         if isempty(lines)
             out=false;
             if nargout > 1
