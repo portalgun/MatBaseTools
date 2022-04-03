@@ -27,32 +27,32 @@ methods
         end
 
         if bStruct
-            keys=fieldnames(varargin{1});
+            kees=fieldnames(varargin{1});
             vals=struct2cell(varargin{1});
         elseif numel(in)==2 && iscell(in{1}) && iscell(in{2})
-            keys=in{1};
+            kees=in{1};
             vals=in{2};
-            if isempty(keys)
-                keys=cellfun(@num2str,num2cell(1:length(vals)'),'UniformOutput',false);
+            if isempty(kees)
+                kees=cellfun(@num2str,num2cell(1:length(vals)'),'UniformOutput',false);
             end
         else
-            keys=in(1:2:n);
+            kees=in(1:2:n);
             vals=in(2:2:n);
         end
 
-        bad=~cellfun(@ischar, keys);
+        bad=~cellfun(@ischar, kees);
         if any(bad)
             error('invalid key value');
         end
         % XXX TODO HANDLE DUPCLICATES
-        if ~isempty(keys)
-            obj.map=containers.Map(keys,vals,'UniformValues',false);
+        if ~isempty(kees)
+            obj.map=containers.Map(kees,vals,'UniformValues',false);
         else
             obj.map=containers.Map('UniformValues',false);
         end
-        if ~isempty(keys)
-        %if obj.bOrdered && ~isempty(keys)
-            obj.order=Vec.col(keys);
+        if ~isempty(kees)
+        %if obj.bOrdered && ~isempty(kees)
+            obj.order=Vec.col(kees);
         end
     end
     function obj=subsasgn(obj,S,val)
@@ -467,6 +467,9 @@ methods(Static,Access=private)
         if exist('indent','var') && ~isempty(indent) && indent~=0
             indnt=repmat(' ',1,indent);
             txt=strrep([indnt txt],newline,[newline indnt]);
+        end
+        if ~endsWith(txt,newline)
+            txt=[txt newline];
         end
 
     end
