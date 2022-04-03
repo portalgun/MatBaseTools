@@ -75,7 +75,7 @@ methods
             end
             return
         end
-        fld=S.subs{1};
+        fld=S.subs(1);
         k=obj.keys;
         if isnumeric(fld)
             if isnumeric(fld) &&  fld-1==numel(obj)
