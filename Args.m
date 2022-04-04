@@ -1,6 +1,17 @@
 classdef Args < handle
 %% TODO
+%%   - flag parsed
+%%   - 1
+%%       + !name - matches class in 3
+%%       + remove from struct if exists as alias
+%%   - 4 TEST
+%%       + 0 is optional, independent
+%%       + 1 is required, independent
+%%       + > 1 is required dependent
+%%       + < 0 is optional dependent
+%%       + same abs(integer) == same group
 %%   - DON'T ALLOW DUPLICATES
+%%
 %% P columns
 %%  1 - names
 %%        main name = 1
@@ -22,8 +33,11 @@ properties
    Opts
 
    P
-   Pdictf
+   PdictF
    PdictR
+   PdictA
+   PKeys
+   PKeysNames
 
    KeepUnmatched=false
    IgnoreUnmatched=false
@@ -247,7 +261,8 @@ methods(Access=private)
         end
         %XXX weird persisentent behavior matlab
         obj.PdictR=containers.Map;
-        obj.Pdictf=containers.Map;
+        obj.PdictF=containers.Map;
+        obj.PdictA=containers.Map;
         obj.UsrArgs=containers.Map;
 
         obj.OBJ=OBJ;
@@ -286,10 +301,9 @@ methods(Access=private)
         end
         obj.parse_own();
         obj.parse_p();
-        obj.expand_structs();
+        obj.handle_structs();
         obj.parse_main();
         obj.parse_nested();
-        %obj.IP.Unmatched
         obj.parse_groups();
         obj.convert_output();
         if ~obj.KeepUnmatched && numel(fieldnames(obj.OUTUM)) > 0
@@ -297,61 +311,87 @@ methods(Access=private)
             error(['Has Unmatched params:' newline '  ' strjoin(flds,[newline '  '])])
         end
     end
-    function expand_structs(obj)
+    function handle_structs(obj)
         % expand user options to structs if needed
-        dkees=keys(obj.PdictR);
+        % e.g.  prop -> Opts.prop
+
+        % get unique nested
         nest=obj.nested(cellfun(@(x) ~isempty(x) && ischar(x),obj.nested(:,2)),:);
         [~,inds]=unique(nest(:,2));
-        okees=nest(inds,2);
-        rokees=nest(inds,1);
-
         bDICT=isa(obj.UsrArgs,'dict');
-        FLDS=keys(obj.UsrArgs);
-        for i = 1:length(FLDS)
-            fld=FLDS{i};
-            if ismember(fld,dkees)
+
+        UFLDS=keys(obj.UsrArgs);
+        for i = 1:length(UFLDS)
+            ufld=UFLDS{i};
+            if ismember(ufld,obj.PKeys) % anything unmatched can be expanded
                 continue
             end
+
             if bDICT
-                val=obj.UsrArgs{fld};
+                val=obj.UsrArgs{ufld};
             else
-                val=obj.UsrArgs(fld);
+                val=obj.UsrArgs(ufld);
             end
-            bDict=isa(val,'dict');
-            bStruct=isstruct(val);
-            if bStruct
-                flds=cellfun(@(x) [fld x],Struct.getFields(val),'UniformOutput',false);
-                newflds=cellfun(@(x) strjoin(x,'.'),flds,'UniformOutput',false);
-                newvals=cellfun(@(x) getfield(val,x{2:end}),flds,'UniformOutput',false);
-                bMem =cellfun(@(x) ismember(x,dkees),newflds);
-            elseif bDict
+
+            if isstruct(val)
+                obj.expand_struct(ufld,val);
+            elseif isa(val,'dict');
                 TODO
-            else
-                continue
-            end
-
-            if ~any(bMem)
-                continue
-            end
-
-            if bDICT
-                obj.UsrArgs=remove(obj.UsrArgs,fld); % XXX CHECK
-                for j = 1:length(newflds)
-                    obj.UsrArgs{newflds{j}}=newvals{j};
-                end
-            else
-                obj.UsrArgs=remove(obj.UsrArgs,fld);
-                for j = 1:length(newflds)
-                    obj.UsrArgs(newflds{j})=newvals{j};
-                end
             end
         end
-        %keys(obj.UsrArgs)
-        %keys(obj.UsrArgs)
-        %values(obj.UsrArgs)
-        %newflds
+        PFLDS=obj.PKeysNames;
+        for i = 1:length(PFLDS)
+            name=PFLDS{i};
+            if ismember(name,UFLDS)
+                continue
+            end
+            aliases=obj.name2aliases(name);
+            ind=contains(aliases,'.');
+            if isempty(aliases) || ~any(ind)
+                continue
+            end
+            aliases=aliases(ind);
+            for j = 1:length(aliases)
+                alias=aliases{j};
+                spl=strsplit(alias,'.');
+                ufld=spl{find(ismember(spl,PFLDS),1,'first')};
+                if isempty(ufld) || ~ismember(ufld,UFLDS)
+                    continue
+                end
+                if bDICT
+                    TODO
+                else
+                    val=obj.UsrArgs(ufld);
+                end
+                if isstruct(val)
+                    obj.UsrArgs(name)=val.(name);
+                    val=rmfield(val,name);
+                else
+                    TODO
+                end
+                obj.UsrArgs(ufld)=val;
+                %obj.UsrArgs=remove(obj.UsrArgs,ufld);
+            end
 
+        end
+    end
+    function contract_struct(obj)
+    end
+    function expand_struct(obj,fld,val)
+        % expanded field
+        flds=cellfun(@(x) [fld x],Struct.getFields(val),'UniformOutput',false);
+        newflds=cellfun(@(x) strjoin(x,'.'),flds,'UniformOutput',false);
+        if ~any(cellfun(@(x) ismember(x,obj.PKeys),newflds));
+            return
+        end
+        % unnested value
+        newvals=cellfun(@(x) getfield(val,x{2:end}),flds,'UniformOutput',false);
 
+        % assign
+        obj.UsrArgs=remove(obj.UsrArgs,fld);
+        for j = 1:length(newflds)
+            obj.UsrArgs(newflds{j})=newvals{j};
+        end
     end
     function convert_output(obj)
         if isempty(obj.OBJ) && isnumeric(obj.OBJ)
@@ -406,7 +446,18 @@ methods(Access=private)
             error
         end
     end
-
+    function aliases=name2aliases(obj,name)
+        aliases=obj.PdictA(name);
+        if length(aliases) == 1
+            aliases={};
+        else
+            aliases=aliases(2:end);
+        end
+    end
+    function name=alias2name(obj,alias)
+        aliases=obj.PdictA(name);
+        name=aliases{1};
+    end
     function parse_p(obj)
         IP=inputParser;
         if size(obj.P)>=2
@@ -433,12 +484,14 @@ methods(Access=private)
             name=obj.P{i,1};
             if iscell(name)
                 %% HANDLE ALIASES
-                obj.Pdictf(f)=name{1};
-                for i = 1:length(name)
-                    obj.PdictR(name{i})=f;
+                obj.PdictF(f)=name{1};
+                for j = 1:length(name)
+                    obj.PdictR(name{j})=f;
                 end
+                obj.PdictA(name{1})=name;
             else
-                obj.Pdictf(f)=name;
+                obj.PdictA(name)={name};
+                obj.PdictF(f)=name;
                 obj.PdictR(name)=f;
             end
 
@@ -501,6 +554,8 @@ methods(Access=private)
 
             IP.addParameter(f,default,test);
         end
+        obj.PKeys=keys(obj.PdictR);
+        obj.PKeysNames=values(obj.PdictF);
         obj.IP=IP;
     end
     function parse_main(obj,in)
@@ -528,7 +583,7 @@ methods(Access=private)
             else
                 nUnm=nUnm+1;
                 key=['u' num2str(nUnm)];
-                obj.Pdictf(key)=flds{i};
+                obj.PdictF(key)=flds{i};
                 obj.PdictR(flds{i})=key;
                 bUm=true;
             end
@@ -595,7 +650,7 @@ methods(Access=private)
         catch ME
             m=Str.RE.match(ME.message,'[uf][0-9]+');
             ind=str2double(m(2:end));
-            msg=regexprep(ME.message,'[uf][0-9]+',obj.Pdictf(m));
+            msg=regexprep(ME.message,'[uf][0-9]+',obj.PdictF(m));
             %m
             error(ME.identifier,msg);
         end
@@ -603,20 +658,43 @@ methods(Access=private)
     end
     function parse_groups(obj)
         names=obj.P(:,1);
-        if numel(obj.uGroups) == 1 && obj.uGroups(1)==0 || isempty(obj.uGroups)
+        if isempty(obj.uGroups) || all(ismember(obj.uGroups(1),[0 1]))
             return
         end
+        nPos=zeros(sum(obj.uGroups > 1));
+        bGdNeg=false(sum(obj.uGroups < 0));
+        p=0;
+        n=0;
         for i = 1:length(obj.uGroups)
             u=obj.uGroups(i);
-            if u==0
+            if u==0 || u == 1
                 continue
             end
             bGroup=cellfun(@(x) ismember(u,x),obj.groups);
-            if all(cellfun(@(x) ~isempty(obj.get_result(x)),names(bGroup)));
-                return
+            n=cellfun(@(x) ~isempty(obj.get_result(x)),names(bGroup));
+            if u > 1
+                p=p+1;
+                nPos(p)=sum(n);
+                bGdPos(p)=all(n);
+            elseif u > 0
+                n=n+1;
+                nNeg(n)=sum(n);
+                bGdNeg(n)=all(n);
             end
         end
-        error('No parse groups were satisfied')
+        if sum(bGdPos) == 1 && (sum(bGdNeg)==0 || (sum(bGdNeg)==1 && nNeg(bGdNeg) > 0))
+            return
+        elseif sum(bGdPos) == 0
+            error('No parse groups were satisfied')
+        elseif sum(bGdPos) > 1
+            error('More than one group satisfied')
+        elseif sum(bGdPos) == 1 && any(numel(n(~bGdPos)) > 0)
+            error('One group satisfied, but conflicting parameters within other groups')
+        elseif sum(bGdPos) == 1 && any(numel(n(~bGdNeg)) > 0)
+            error('One group satisfied, but conflicting optional parameters within other groups')
+        else
+            error('unhandled error condition')
+        end
     end
     function [p,cls]=get_other_P(obj,o)
         if ischar(o)
@@ -648,7 +726,7 @@ methods(Access=private)
     function parse_nested(obj)
         umfflds=fieldnames(obj.IP.Unmatched);
         umffldsO=umfflds;
-        umflds=cellfun(@(x) obj.Pdictf(x) ,umfflds,'UniformOutput',false);
+        umflds=cellfun(@(x) obj.PdictF(x) ,umfflds,'UniformOutput',false);
         for i = 1:length(obj.nested)
             if isempty(obj.nested{i,1})
                 continue
@@ -725,10 +803,10 @@ methods(Access=private)
         out=obj.get_result_f(obj.PdictR(fld));
     end
     function set_result_f(obj,DEST,fld)
-        flds=strsplit(obj.Pdictf(fld),'.');
+        flds=strsplit(obj.PdictF(fld),'.');
         obj.(DEST)=setfield(obj.(DEST),flds{:},obj.get_result_f(fld));
 
-        %obj.OUT.(obj.Pdictf(flds{i}))=obj.get_result_f(flds{i});
+        %obj.OUT.(obj.PdictF(flds{i}))=obj.get_result_f(flds{i});
     end
     function out=get_result_f(obj,fld)
         if ismember(fld,obj.IP.UsingDefaults)
@@ -755,7 +833,7 @@ methods(Access=private)
         flds=fieldnames(obj.IP.Unmatched);
         obj.OUTUM=struct();
         for i = 1:length(flds)
-            obj.OUTUM.(obj.Pdictf(flds{i}))=obj.IP.Unmatched.(flds{i});
+            obj.OUTUM.(obj.PdictF(flds{i}))=obj.IP.Unmatched.(flds{i});
         end
     end
     function out_as_struct(obj);
@@ -769,7 +847,7 @@ methods(Access=private)
         flds=fieldnames(obj.IP.Unmatched);
         obj.OUTUM=struct();
         for i = 1:length(flds)
-            obj.OUTUM.(obj.Pdictf(flds{i}))=obj.IP.Unmatched.(flds{i});
+            obj.OUTUM.(obj.PdictF(flds{i}))=obj.IP.Unmatched.(flds{i});
         end
     end
     function out_as_dict(obj);
@@ -1225,56 +1303,81 @@ methods(Static, Hidden)
         %val=obj.inc('bFlag',-1)
     end
     function test_nested()
-         1
-         P={ ...
-             'LorRorC', [],   {'L','R','C'};
-             'slider',  [],    [0 .1 1];
-             'bFlag',   [],    'isbinary';
-             'Opts',    [],    '!TestingObj';
+         % 1
+         % P={ ...
+         %     'LorRorC', [],   {'L','R','C'};
+         %     'slider',  [],    [0 .1 1];
+         %     'bFlag',   [],    'isbinary';
+         %     'Opts',    [],    '!TestingObj';
+         % };
+         % opts.LorRorC='L';
+         % opts.slider=.5;
+         % opts.bFlag=0;
+         % opts.prop1='A';
+         % opts.prop2=.9;
+         % %opts.TestingObj
+         % [out]=Args.parse([],P,opts);
+         % out
+         % out.Opts
+
+         % 2
+         % P={ ...
+         %     'LorRorC', [],   {'L','R','C'};
+         %     'slider',  [],    [0 .1 1];
+         %     'bFlag',   [],    'isbinary';
+         %     'Opts',    [],    TestingObj.getP();
+         % };
+         % opts.LorRorC='L';
+         % opts.slider=.5;
+         % opts.bFlag=0;
+         % opts.prop1='A';
+         % opts.prop2=.9;
+         % %opts.TestingObj
+         % [out]=Args.parse([],P,opts);
+         % out
+         % out.Opts
+
+        % 3
+        % P={ ...
+        %     'LorRorC', [],   {'L','R','C'};
+        %     'slider',  [],    [0 .1 1];
+        %     'bFlag',   [],    'isbinary';
+        %     'Opts',    [],    '!TestingObj';
+        % };
+        % opts.LorRorC='L';
+        % opts.slider=.5;
+        % opts.bFlag=0;
+        % opts.Opts.prop1='A';
+        % opts.Opts.prop2=.9;
+        % %opts.TestingObj
+        % [out]=Args.parse([],P,opts);
+        % out
+        % out.Opts
+
+        4
+        P={...
+             {'LorRorC','Opts.LorRorC'}, [],   {'L','R','C'};
+             'slider',                  [],    [0 .1 1];
+             'bFlag',                   [],    'isbinary';
+             'Opts',                    [],    '!TestingObj';
          };
-         opts.LorRorC='L';
+         opts.Opts.LorRorC='L';
          opts.slider=.5;
          opts.bFlag=0;
-         opts.prop1='A';
-         opts.prop2=.9;
-         %opts.TestingObj
-         [out]=Args.parse([],P,opts);
+         opts.Opts.prop1='A';
+         opts.Opts.prop2=.9;
+        % %opts.TestingObj
+        [out]=Args.parse([],P,opts);
          out
          out.Opts
 
-         2
+        5
          P={ ...
-             'LorRorC', [],   {'L','R','C'};
-             'slider',  [],    [0 .1 1];
-             'bFlag',   [],    'isbinary';
-             'Opts',    [],    TestingObj.getP();
+             {'LorRorC','Opts.LorRorC'},[],   {'L','R','C'};
+             'slider',                  [],    [0 .1 1];
+             'bFlag',                   [],    'isbinary';
+             {'!Test','Opts'},          [],    '!TestingObj';
          };
-         opts.LorRorC='L';
-         opts.slider=.5;
-         opts.bFlag=0;
-         opts.prop1='A';
-         opts.prop2=.9;
-         %opts.TestingObj
-         [out]=Args.parse([],P,opts);
-         out
-         out.Opts
-
-        %3
-        %P={ ...
-        %    'LorRorC', [],   {'L','R','C'};
-        %    'slider',  [],    [0 .1 1];
-        %    'bFlag',   [],    'isbinary';
-        %    'Opts',    [],    '!TestingObj';
-        %};
-        %opts.LorRorC='L';
-        %opts.slider=.5;
-        %opts.bFlag=0;
-        %opts.Opts.prop1='A';
-        %opts.Opts.prop2=.9;
-        %%opts.TestingObj
-        %[out]=Args.parse([],P,opts);
-        %out
-        %out.Opts
     end
 end
 end
