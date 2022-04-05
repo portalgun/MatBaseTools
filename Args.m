@@ -1,9 +1,6 @@
 classdef Args < handle
 %% TODO
 %%   - flag parsed
-%%   - 1
-%%       + !name - matches class in 3
-%%       + remove from struct if exists as alias
 %%   - 4 TEST
 %%       + 0 is optional, independent
 %%       + 1 is required, independent
@@ -11,12 +8,15 @@ classdef Args < handle
 %%       + < 0 is optional dependent
 %%       + same abs(integer) == same group
 %%   - DON'T ALLOW DUPLICATES
+%%     args or P
 %%
 %% P columns
 %%  1 - names
 %%        main name = 1
-%%        aliases 2
+%%            !name - matches class in 3
+%%        aliases 2:end
 %%        'opts.fld.val' -> struct
+%%        remove value from struct if exists as alias  e.g. {'LorRorC','Opts.LorRorC'},[],   {'L','R','C'}; 'Opts' ....
 %%  3 - tests/nested
 %%        struct => nestedP
 %%        char starting with ! => nested P
@@ -267,6 +267,7 @@ methods(Access=private)
 
         obj.OBJ=OBJ;
         obj.P=P;
+
         obj.nPosArgs=sum(cellfun(@isempty,P(:,1)));
         if length(argsin) == 1 && isstruct(argsin{1}) && numel(argsin{1}) > 1
             error('Detected input struct array with numel > 1.  This is likely due to nested structs in cell. Check your input and try again.')
@@ -482,7 +483,9 @@ methods(Access=private)
             %obj.P{i,1}
             f=['f' num2str(i)];
             name=obj.P{i,1};
+            bObj=startsWith(name,'!');
             if iscell(name)
+                name(bObj)=strrep(name(bObj),'!','');
                 %% HANDLE ALIASES
                 obj.PdictF(f)=name{1};
                 for j = 1:length(name)
@@ -490,6 +493,9 @@ methods(Access=private)
                 end
                 obj.PdictA(name{1})=name;
             else
+                if bObj
+                    name=name(1:end);
+                end
                 obj.PdictA(name)={name};
                 obj.PdictF(f)=name;
                 obj.PdictR(name)=f;
@@ -505,7 +511,15 @@ methods(Access=private)
                     else
                         obj.nested(i,:)={name T};
                     end
-                    test=@(x) isempty(x) || ismember(class(x),{'dict','struct'});
+                    if all(bObj)
+                        test=@(x) isa(x,cls);
+                    elseif bObj(1)
+                        test=@(x) isa(x,cls) || (isempty(x) || ismember(class(x),{'dict','struct'}));
+                    elseif ~any(bObj);
+                        test=@(x) isempty(x) || ismember(class(x),{'dict','struct'});
+                    else
+                        error('! is only declared at main parameter name')
+                    end
                     obj.toggles(i,:)={name,test};
                 elseif isnumeric(T) && (numel(T)==2 || numel(T)==3)
                     % min,max,inc
@@ -571,6 +585,26 @@ methods(Access=private)
         nest=obj.nested;
         nest(cellfun(@isempty,nest(:,1)),:)=[];
         nestrmflds={};
+
+        cind=cellfun(@iscell,nest(:,1));
+        if any(cind)
+            ind=find(cind);
+            nn={};
+            for i = 1:length(ind)
+                names=Vec.col([nest{i,1}]);
+                val=nest(i,2:end);
+                N=numel(names);
+                n=[names repmat(val,N,1) repmat({i},N,1)];
+                nn=[nn; n];
+            end
+            iind=find(~cind);
+            if ~isempty(iind)
+                nest=[[nest(~cind,:) {iind}]; nn];
+            else
+                nest=nn;
+            end
+        end
+
         for i = 1:length(flds)
             bUm=false;
             if bDict
@@ -626,8 +660,12 @@ methods(Access=private)
             % PARSE NESTED
             if ismember(flds{i},nest(:,1))
                 o=nest{ismember(nest(:,1),flds{i}),2};
-                p=obj.get_other_P(o);
-                val=Args.parse([],p,val);
+                if ischar(o) && isa(val,o);
+                    ;
+                else
+                    p=obj.get_other_P(o);
+                    val=Args.parse([],p,val);
+                end
                 nestrmflds{end+1}=flds{i};
             end
 
@@ -641,7 +679,12 @@ methods(Access=private)
 
         % RM NESTED SO NOT USED IN UM CASES
         if ~isempty(nestrmflds)
-            ind=cellfun(@(x) ~isempty(x) && ismember(x,nestrmflds),obj.nested(:,1));
+            if any(cind)
+                fun=@(x) ~isempty(x) && ~iscell(x) && ismember(x,nestrmflds);
+                ind=cellfun(@(x) fun(x),obj.nested) | cellfun(@(y) ~isempty(y) && iscell(y) && any(cellfun(@(x) fun(x) ,y)),obj.nested(:,1));
+            else
+                ind=cellfun(@(x) ~isempty(x) && ismember(x,nestrmflds),obj.nested(:,1));
+            end
             obj.nested(ind,:)={[]};
         end
 
@@ -658,42 +701,93 @@ methods(Access=private)
     end
     function parse_groups(obj)
         names=obj.P(:,1);
-        if isempty(obj.uGroups) || all(ismember(obj.uGroups(1),[0 1]))
+        if isempty(obj.uGroups) || all(ismember(obj.uGroups(1),[0 -1]))
             return
         end
-        nPos=zeros(sum(obj.uGroups > 1));
-        bGdNeg=false(sum(obj.uGroups < 0));
-        p=0;
-        n=0;
+        U=unique([abs(obj.uGroups) 0 1 ])';
+        N=numel(U);
+        n=numel(numel(obj.uGroups));
+        A=[U zeros(length(U),4)];
         for i = 1:length(obj.uGroups)
             u=obj.uGroups(i);
-            if u==0 || u == 1
-                continue
-            end
             bGroup=cellfun(@(x) ismember(u,x),obj.groups);
             n=cellfun(@(x) ~isempty(obj.get_result(x)),names(bGroup));
-            if u > 1
-                p=p+1;
-                nPos(p)=sum(n);
-                bGdPos(p)=all(n);
-            elseif u > 0
-                n=n+1;
-                nNeg(n)=sum(n);
-                bGdNeg(n)=all(n);
+            Ai=find(ismember(A(:,1),abs(u)));
+            if u >= 1
+                c=2; % req
+            elseif u <= 0
+                c=4; % optional
+            end
+            if isempty(n)
+                n=0;
+            end
+            A(Ai,c)=sum(n);
+            A(Ai,c+1)=numel(n);
+        end
+        % row
+        zer=1;
+        one=2;
+        grps=3:size(A,1);
+
+        % col
+        req=2;
+        nreq=3;
+        opt=4;
+        nopt=5;
+
+        assert(~any(A(zer,req)),'Zeros marked as required: This should not happend');
+        assert(~any(A(one,opt)),'Ones makred as required: This should not happend');
+
+        % REQ
+        if any(A(one,nreq) > 0 & A(one,req) < A(one,nreq));
+            error('Missing required parameters');
+            % TODO LIST
+        end
+
+        %A
+        %A(grps,req)
+        % REQ GROUPS
+        if isempty(grps)
+            return
+            % no groups
+        end
+        if all(A(grps,nreq)==0)
+            % no required groups
+        else
+            c=A(grps,req)==A(grps,nreq) & A(grps,nreq) ~=0;
+            a=A(grps,nreq) > 0 & A(grps,req) > 0 & ~c;
+            if sum(c) == 1 && ~any(a)
+                % good groups
+            elseif sum(c) > 1
+                % too many groups
+                out=A(grps,1);
+                out=Vec.row(out(c));
+                error('More than one group satisfied: %s',Num.toStr(out))
+            elseif sum(c) < 1
+                % to few groups
+                error('No parse groups were satisfied')
+            elseif sum(a) > 0
+                % has filled conflicting groups
+                out=A(grps,1);
+                out1=Vec.row(out(c));
+                out2=Vec.row(out(a));
+                error('One group %d satisfied, but conflicting parameters within other groups: %s',out1,num2str(out2))
             end
         end
-        if sum(bGdPos) == 1 && (sum(bGdNeg)==0 || (sum(bGdNeg)==1 && nNeg(bGdNeg) > 0))
-            return
-        elseif sum(bGdPos) == 0
-            error('No parse groups were satisfied')
-        elseif sum(bGdPos) > 1
-            error('More than one group satisfied')
-        elseif sum(bGdPos) == 1 && any(numel(n(~bGdPos)) > 0)
-            error('One group satisfied, but conflicting parameters within other groups')
-        elseif sum(bGdPos) == 1 && any(numel(n(~bGdNeg)) > 0)
-            error('One group satisfied, but conflicting optional parameters within other groups')
+
+        % OPT GROUPS
+        if all(A(grps,nopt)==0)
+            % no optional
         else
-            error('unhandled error condition')
+            b=A(grps,nopt) > 0 & A(grps,opt) > 0 & ~c;
+            if sum(b) > 0
+                out=A(grps,1);
+                out1=Vec.row(out(c));
+                out2=Vec.row(out(b));
+                str=sprintf('Optional parameters outside of met and required group %d: %s',out1,Num.toStr(out2));
+                % TODO LIST
+                Error.warnSoft(str);
+            end
         end
     end
     function [p,cls]=get_other_P(obj,o)
@@ -1183,39 +1277,137 @@ methods(Static, Hidden)
         [OUT,UM]=Args.parse(dict(),P,parseOpts,vargARGS{:})
     end
     function test_groups()
-        P={ ...
-            'posXYZm',     [],'','1';
-            'vrs',         [],'',2;
-            'vrg',         [],'',2;
-            'posXYpix',    [],'',3;
-            'los',         [],'',4;
-            'depthC',      [],'',4;
-            'A',           [],'',0;
-            'B',           [],'',0;
+        p={ ...
+            'r1_1',          [],'','1';
+            'r1_2',          [],'',1;
+            'o0_1',          [],'',0;
+            %'o2',          [],'',-1;
+            'g2_1',        [],'',2;
+            'g2_2',        [],'',2;
+            'g2_3',        [],'',2;
+            'g3_1',        [],'',3;
+            'g3_2',        [],'',3;
+            'g3_3',        [],'',3;
+            'g4_1',        [],'',4;
+            'g4_2',        [],'',4;
+            'o2_1',        [],'',-2;
+            'o2_2',        [],'',-2;
+            'o3_1',        [],'',-3;
         };
-        1
+        disp(0)
+        opts=struct(); % req met
+        opts.r1_1=1;
+        opts.r1_2=1;
+        opts.g2_1=1;
+        opts.g2_2=1;
+        opts.g2_3=1;
+        Args.parse([],p,opts);
+
         opts=struct();
-        opts.posXYZm=[1 2 3];
-        Args.parse([],P,opts);
+        opts.r1_1=1;
 
-        2
-        opts.vrs=0;
-        Args.parse([],P,opts);
-
-        3
-        opts=rmfield(opts,'posXYZm');
+        disp(1) % r1_2 missing
         try
-            Args.parse([],P,opts);
+            Args.parse([],p,opts);
         catch ME
             disp(ME.message)
         end
 
-        4
-        P={...
-            'A',           [],'',0;
-            'B',           [],'',0;
-        };
-        Args.parse([],P,struct());
+
+        disp(2) % no groups satisfied
+        opts=struct();
+        opts.r1_1=1;
+        opts.r1_2=1;
+        try
+            Args.parse([],p,opts);
+        catch ME
+            disp(ME.message)
+        end
+
+        disp(3) % no groups satisfied, partly
+        opts=struct();
+        opts.r1_1=1;
+        opts.r1_2=1;
+        opts.g2_1=1;
+        try
+            Args.parse([],p,opts);
+        catch ME
+            disp(ME.message)
+        end
+
+        disp(4) % groups satisfied
+        opts=struct();
+        opts.r1_1=1;
+        opts.r1_2=1;
+        opts.g2_1=1;
+        opts.g2_2=1;
+        opts.g2_3=1;
+        try
+            Args.parse([],p,opts);
+            disp('Good')
+        catch ME
+            disp(ME.message)
+        end
+
+        disp(5) % more than one group satsified
+        opts=struct();
+        opts.r1_1=1;
+        opts.r1_2=1;
+        opts.g2_1=1;
+        opts.g2_2=1;
+        opts.g2_3=1;
+        opts.g3_1=1;
+        opts.g3_2=1;
+        opts.g3_3=1;
+        try
+            Args.parse([],p,opts);
+        catch ME
+            disp(ME.message)
+        end
+
+        disp(6) % group satsified with extra conflicting req
+        opts=struct();
+        opts.r1_1=1;
+        opts.r1_2=1;
+        opts.g2_1=1;
+        opts.g2_2=1;
+        opts.g2_3=1;
+        opts.g3_1=1;
+        opts.g4_1=1;
+        try
+            Args.parse([],p,opts);
+        catch ME
+            disp(ME.message)
+        end
+
+        disp(7) % group satisfied with optional
+        opts=struct();
+        opts.r1_1=1;
+        opts.r1_2=1;
+        opts.g2_1=1;
+        opts.g2_2=1;
+        opts.g2_3=1;
+        opts.o2_1=1;
+        try
+            Args.parse([],p,opts);
+        catch ME
+            disp(ME.message)
+        end
+
+        disp(8) % group satisfied with conflicting optional
+        opts=struct();
+        opts.r1_1=1;
+        opts.r1_2=1;
+        opts.g2_1=1;
+        opts.g2_2=1;
+        opts.g2_3=1;
+        opts.o3_1=1;
+        try
+            Args.parse([],p,opts);
+        catch ME
+            disp(ME.message)
+        end
+
     end
     function test_aliases()
         P={ ...
@@ -1303,81 +1495,90 @@ methods(Static, Hidden)
         %val=obj.inc('bFlag',-1)
     end
     function test_nested()
-         % 1
-         % P={ ...
-         %     'LorRorC', [],   {'L','R','C'};
-         %     'slider',  [],    [0 .1 1];
-         %     'bFlag',   [],    'isbinary';
-         %     'Opts',    [],    '!TestingObj';
-         % };
-         % opts.LorRorC='L';
-         % opts.slider=.5;
-         % opts.bFlag=0;
-         % opts.prop1='A';
-         % opts.prop2=.9;
-         % %opts.TestingObj
-         % [out]=Args.parse([],P,opts);
-         % out
-         % out.Opts
+         disp(1) % UM resolved
+          P={ ...
+              'LorRorC', [],   {'L','R','C'};
+              'slider',  [],    [0 .1 1];
+              'bFlag',   [],    'isbinary';
+              'Opts',    [],    '!TestingObj';
+          };
+          opts.LorRorC='L';
+          opts.slider=.5;
+          opts.bFlag=0;
+          opts.prop1='A';
+          opts.prop2=.9;
+          [out]=Args.parse([],P,opts);
+          %out
+          disp(out.Opts)
 
-         % 2
-         % P={ ...
-         %     'LorRorC', [],   {'L','R','C'};
-         %     'slider',  [],    [0 .1 1];
-         %     'bFlag',   [],    'isbinary';
-         %     'Opts',    [],    TestingObj.getP();
-         % };
-         % opts.LorRorC='L';
-         % opts.slider=.5;
-         % opts.bFlag=0;
-         % opts.prop1='A';
-         % opts.prop2=.9;
-         % %opts.TestingObj
-         % [out]=Args.parse([],P,opts);
-         % out
-         % out.Opts
+         disp(2) % UM resolved
+          P={ ...
+              'LorRorC', [],   {'L','R','C'};
+              'slider',  [],    [0 .1 1];
+              'bFlag',   [],    'isbinary';
+              'Opts',    [],    TestingObj.getP();
+          };
+          opts=struct();
+          opts.LorRorC='L';
+          opts.slider=.5;
+          opts.bFlag=0;
+          opts.prop1='A';
+          opts.prop2=.9;
+          [out]=Args.parse([],P,opts);
+          %out
+          disp(out.Opts)
 
-        % 3
-        % P={ ...
-        %     'LorRorC', [],   {'L','R','C'};
-        %     'slider',  [],    [0 .1 1];
-        %     'bFlag',   [],    'isbinary';
-        %     'Opts',    [],    '!TestingObj';
-        % };
-        % opts.LorRorC='L';
-        % opts.slider=.5;
-        % opts.bFlag=0;
-        % opts.Opts.prop1='A';
-        % opts.Opts.prop2=.9;
-        % %opts.TestingObj
-        % [out]=Args.parse([],P,opts);
-        % out
-        % out.Opts
+         disp(3)
+         P={ ...
+             'LorRorC', [],   {'L','R','C'};
+             'slider',  [],    [0 .1 1];
+             'bFlag',   [],    'isbinary';
+             'Opts',    [],    '!TestingObj';
+         };
+         opts=struct();
+         opts.LorRorC='L';
+         opts.slider=.5;
+         opts.bFlag=0;
+         opts.Opts.prop1='A';
+         opts.Opts.prop2=.9;
+         [out]=Args.parse([],P,opts);
+         %out
+         disp(out.Opts)
 
-        4
+        disp(4)
         P={...
              {'LorRorC','Opts.LorRorC'}, [],   {'L','R','C'};
              'slider',                  [],    [0 .1 1];
              'bFlag',                   [],    'isbinary';
              'Opts',                    [],    '!TestingObj';
          };
+         opts=struct();
          opts.Opts.LorRorC='L';
          opts.slider=.5;
          opts.bFlag=0;
          opts.Opts.prop1='A';
          opts.Opts.prop2=.9;
-        % %opts.TestingObj
         [out]=Args.parse([],P,opts);
-         out
-         out.Opts
+        %out
+        disp(out.Opts)
 
-        5
+        disp(5)
          P={ ...
              {'LorRorC','Opts.LorRorC'},[],   {'L','R','C'};
              'slider',                  [],    [0 .1 1];
              'bFlag',                   [],    'isbinary';
              {'!Test','Opts'},          [],    '!TestingObj';
          };
+         opts=struct();
+         opts.LorRorC='L';
+         opts.slider=.5;
+         opts.bFlag=0;
+         opts.Test=TestingObj;
+         opts.Test.prop1='A';
+         opts.Test.prop2='.9';
+        [out]=Args.parse([],P,opts);
+        disp(out.Test)
+
     end
 end
 end
