@@ -72,7 +72,7 @@ methods(Static)
         if ~exist('file','var') || isempty(file)
             error('chkPerms requires filename');
         elseif bQuiet & ~exist('file','var') || isempty(file)
-            warning(['chkPerms: file ' file ' does not exist!']);
+            Error.warnSoft(['chkPerms: file ' file ' does not exist!']);
         end
 
         %%
@@ -96,7 +96,7 @@ methods(Static)
             bTest=false;
         end
 
-        if ~exist('home','var') || isempty(home)
+        if ~nargin < 4 || isempty(home)
             home=Dir.home();
         end
         if endsWith(home,'/')
@@ -131,7 +131,7 @@ methods(Static)
             error('Something went wrong');
         end
         if ~bTest && ~strcmp(src,trueSrc)
-            warning(['Fixing bad symlink ' trueSrc ' to ' src]);
+            Error.warnSoft(['Fixing bad symlink ' trueSrc ' to ' src]);
             delete(dest);
             FilDir.ln(src,dest);
         elseif bTest
@@ -252,7 +252,8 @@ methods(Static)
         FilDir.cp(file,newname);
 
     end
-    function cp(src,dest)
+    function cp(src,dest,bLn)
+        % XXX doesn't work well with symlinks
         if FilDir.check_cell_src_dest(src,dest)
             for i = 1:length(src)
                 FilDir.cp(src{i},dest{i});
@@ -280,7 +281,7 @@ methods(Static)
         if nargin < 0
             status=stat;
             if nargin < 1
-                msg=ms;
+                msg=ms;scl . append /Groups/admin GroupMembership
             end
         end
     end
@@ -290,7 +291,11 @@ methods(Static, Access=private)
 %%% LINK
 %% LN
     function out=ln_C_unix_(origin,destination)
-        out=ln_unix_cpp(origin,destination);
+        try
+            out=ln_unix_cpp(origin,destination);
+        catch ME
+            out=ln_cpp(origin,destination);
+        end
         out=FilDir.isLink(destination);
     end
     function out=ln_C_win32_(origin,destination)
@@ -302,7 +307,7 @@ methods(Static, Access=private)
         cmd=['ln -s ' origin ' ' destination];
         [msg,bSuccess]=Sys.run(cmd);
     end
-    function bSuccess=ln_win32_(origin,destination) 
+    function bSuccess=ln_win32_(origin,destination)
         flag='';
         if Dir.exist(origin)
             flag=['/d '];
@@ -312,7 +317,11 @@ methods(Static, Access=private)
     end
 %% ISLINK
     function out=isLink_C_unix_(thing)
-        out=issymlink_unix_cpp(thing);
+        try
+            out=issymlink_cpp(thing);
+        catch
+            out=issymlink_unix_cpp(thing);
+        end
     end
     function out=isLink_C_win32_(thing)
         out=issymlink_win32_cpp(thing);
@@ -344,7 +353,11 @@ methods(Static, Access=private)
     %end
 %% READLINK
     function out=readLink_C_unix(thing)
-        out=readlink_unix_cpp(thing);
+        try
+            out=readlink_cpp(thing);
+        catch
+            out=readlink_unix_cpp(thing);
+        end
     end
     function out=readLink_C_win32(thing)
         out=readlink_win32_cpp(thing);
@@ -384,7 +397,7 @@ methods(Static, Access=private)
 %% FIND
 
     function out=findPC_(dire,re,depth,ftype);
-        if ~exist('depth','var') || isempty(depth) 
+        if ~exist('depth','var') || isempty(depth)
             depthStr='';
         else
             depthStr=[' -Depth ' num2str(depth)];
@@ -438,14 +451,14 @@ methods(Static, Access=private)
             dire=[dire filesep];
         end
         if bFd
-            cmd=['fd -L --color never ' depthStr typeStr  '--regex ''' re  ''' --base-directory ' dire];
+            cmd=['fd -L -H --color never ' depthStr typeStr  '--regex ''' re  ''' --base-directory ' dire];
             [~,out]=unix(cmd);
         elseif ismac
             dired=dire;
             while endsWith(dired,filesep)
                 dired=dired(1:end-1);
             end
-            cmd=['find -L ' dired ' ' depthStr typeStr '-regex ''' re '''' ];
+            cmd=['find -L -E ' dired ' ' depthStr typeStr '-regex ''.*/' re '''' ];
             [~,out]=unix(cmd);
 
             out=strrep(out,dire,'');

@@ -7,8 +7,11 @@ methods(Static)
     end
     function out=home()
         % XXX
-        out=Dir.homeC_();
-        %out=Dir.homeCmd_();
+        try
+            out=Dir.homeC_();
+        catch
+            out=Dir.homeCmd_();
+        end
     end
     function out=isempty()
         dirs=dir(dire);
@@ -89,6 +92,9 @@ methods(Static)
         dirsfull=strcat(dire,dirs,filesep);
     end
     function [fnames,fnamesfull]=files(dire)
+        if nargin < 1 || isempty(dire)
+            dire=pwd;
+        end
         if ~isequal(dire(end),filesep)
             dire=[dire filesep];
         end
@@ -119,29 +125,86 @@ methods(Static)
         expFcnListAll=unique(expFcnListAll);
     end
 %% RM
-    function out=rm_rf(dire)
-        if exist(dire,'file')
-            delete(file);
+    function out=rm_rf(dire,bDry)
+        if nargin < 2
+            bDry=false;
+        end
+        if Fil.is(dire)
+            if bDry
+                disp(['dry file delete ' dire]);
+            else
+                delete(file);
+            end
             return
-        elseif FilDir.isLink(dire,'file')
-            FilDir.unlink(dire);
+        elseif FilDir.isLink(dire)
+            if bDry && nargout < 1
+                disp(['dry unlink ' dire]);
+            else
+                FilDir.unlink(dire);
+            end
             return
         elseif ~exist(dire,'dir')
             error(['File/directory ' dire ' does not exist.']);
         end
 
-        dirs=FilDir.find(dire,'.*',[],'d');
-        text=[ 'Remove the following directories and their contents?' newline strjoin(dirs,newline)];
-        r=Input.yn(text);
-        if ~r
-            return
+        dire=Dir.parse(dire);
+        dirsAll =FilDir.find(dire,'.*',[],'d');
+        if ~iscell(dirsAll)
+            dirsAll={dirsAll};
         end
-        files=find(dire,'.*',[],'f');
+        if isempty(dirsAll{1})
+            bLnk=[];
+            dirs={};
+            dlnks={};
+        else
+            bLnk=cellfun(@(x) FilDir.isLink([dire x]),dirsAll);
+            dirs=flipud(dirsAll(~bLnk)); % flip so subdirectories first
+            dlnks=dirsAll(bLnk);
+        end
+
+        if ~bDry && ~isempty(dirsAll{1})
+            lst=strjoin(strcat({'   '},dirsAll),newline);
+            disp(['From ' dire]);
+            text=[ '--remove the following directories and their contents?' newline lst newline];
+            r=Input.yn(text);
+            if ~r
+                return
+            end
+        end
+        dirs=strcat(dire,dirs);
+        dlnks=strcat(dire,dlnks);
+
+        % UNLINK FIRST SO DON'T DELETE SOURCE FILES
+        % PARENTS FIRST SO NO FLIP
+        for i = 1:length(dlnks)
+            if bDry & nargout < 1
+                disp(['dry unlink ' dlinks{i}]);
+            else
+                FilDir.unlink(dlnks{i});
+            end
+        end
+        % FIND FILES AFTER UNLINKING
+        files=FilDir.find(dire,'.*',[],'f');
+        if ~isempty(files)
+            files=strcat(dire,files);
+        end
         for i = 1:length(files)
-            delete(files{i});
+            if bDry & nargout < 1
+                disp(['dry file delete ' files{i}]);
+            else
+                delete(files{i});
+            end
         end
         for i =1:length(dirs)
-            rmdir(dirs{i});
+            if bDry & nargout < 1
+                disp(['dry dir delete ' dirs{i}]);
+            else
+                rmdir(dirs{i});
+            end
+        end
+        rmdir(dire);
+        if nargout > 1
+            out=[dlnks; files; dirs];
         end
     end
     function out=rmBrokenLinks(dire)
@@ -176,11 +239,11 @@ methods(Static)
     end
 %% FIND
     function out=find(dire,re,depth)
-        if ~exist('depth','var')
+        if nargin < 3
             depth=[];
         end
-        if ~exist('dire','var')
-            dire=[];
+        if nargin < 2
+            re='.*';
         end
         out=FilDir.find(dire,re,depth,'d');
     end
