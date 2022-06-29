@@ -48,7 +48,7 @@ methods
         if ~isempty(kees)
             obj.map=containers.Map(kees,vals,'UniformValues',false);
         else
-            obj.map=containers.Map('UniformValues',false);
+            obj.map=containers.Map('KeyType','char','ValueType','any');
         end
         if ~isempty(kees)
         %if obj.bOrdered && ~isempty(kees)
@@ -75,7 +75,11 @@ methods
             end
             return
         end
-        fld=S.subs(1);
+        try
+            fld=S.subs{1};
+        catch
+            fld=S.subs(1);
+        end
         k=obj.keys;
         if isnumeric(fld)
             if isnumeric(fld) &&  fld-1==numel(obj)

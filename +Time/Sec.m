@@ -1,6 +1,9 @@
 classdef Sec < handle
 methods(Static)
     function [hr,min,sec,ms]=human(in)
+        %if nargin < 1 || isempty(in)
+        %    in=datetime('now','TimeZone','local');
+        %end
         hr=floor(in/3600);
         in=in-3600*hr;
         min=floor(in/60);

@@ -1,5 +1,33 @@
 classdef Obj < handle
 methods(Static)
+    function tf = hasProp( obj, propName )
+        try
+            if ( isa(obj, 'handle') || ~isobject(obj) ) % COM is an example that returns FALSE from ISOBJECT but should go into this branch
+                if isa(obj, 'double') % In case the object is casted to double
+                    obj = handle(obj);
+                    if ishghandle(obj) % graphics handle
+                        tf = isprop(obj, propName); % delegate to HG ISPROP overload
+                        return
+                    end
+                end
+                p = findprop(obj, propName); % match case sensitivity determined by the object's FINDPROP
+                tf= ~isempty(p) && strcmpi(p.Name,propName); % make sure property match to the complete query text
+            else % assume FINDPROP is not defined for OBJ and query METACLASS
+                mc = metaclass(obj);
+                if isempty(mc)  % no property
+                    tf = false;
+                else
+                    tf = ~isempty( findobj(mc.PropertyList, '-depth',0,'Name', propName) );
+                end
+            end
+        catch
+            tf = false;
+        end
+    end
+    function tf=hasprop_fast(obj,propName)
+            p = findprop(obj, propName); % match case sensitivity determined by the object's FINDPROP
+            tf= ~isempty(p) && strcmpi(p.Name,propName); % make sure property match to the complete query text
+    end
     function newObj = copy(obj)
         try
                 % R2010b or newer - directly in memory (faster)

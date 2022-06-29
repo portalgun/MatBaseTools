@@ -580,6 +580,8 @@ methods(Static,Hidden)
 
 
     end
+end
+methods(Static)
     function val=parseVal(val)
         if all(ismember(val,'-.0123456789')) % CONVERT TO NUMBER
             orig=val;
@@ -590,6 +592,36 @@ methods(Static,Hidden)
         elseif all(ismember(val,' ()^*/[]:-.0123456789')) % EVALUATE MAT & ARITHMETIC
             val=eval(val);
         end
+    end
+    function [flds,val,exitflag,msg]=parseStr(str,reDelim)
+        exitflag=true;
+        flds=[];
+        val=[];
+        msg='';
+        if nargin < 2
+            reDelim=' *= *';
+        end
+
+        spl=strsplit(strtrim(str),reDelim,'DelimiterType','RegularExpression');
+        if isempty(spl)
+            msg='Param string is empty.';
+            if nargout < 4
+                error(msg);
+            end
+            return
+        end
+        flds=spl(1:end-1);
+
+        if length(spl) > 2
+            msg=['No param value in string for field ''' flds{1} '''.'];
+            if nargout < 4
+                warning(msg);
+            end
+            return
+        end
+
+        val=Cfg.parseVal(spl{end});
+
     end
 end
 

@@ -1,5 +1,16 @@
 classdef Sys < handle
 methods(Static)
+    function term(cmd)
+        term=getenv('TERM');
+
+        pre=['export DISPLAY=:0; ' ...
+             'xhost local:$(whoami) > /dev/null; '  ...
+             'export LD_PRELOAD=/usr/lib/libstdc++.so; ' ...
+             'export LD_LIBRARY_PATH=/usr/lib/xorg/modules; ' ...
+            ];
+        CMD=sprintf('%s %s -e ''%s''',pre,term,cmd);
+        unix(CMD);
+    end
     function [out,bSuccess] = run(cmd,bSpace)
 
         % function [out,bSuccess] = Sys.run(cmd,bSpace)
@@ -23,7 +34,11 @@ methods(Static)
         end
 
         %RUN TRADITIONAL SYSTEM COMMAND
-        [bSuccess,out]=system(cmd);
+        if isunix
+            [bSuccess,out]=unix(cmd);
+        else
+            [bSuccess,out]=system(cmd);
+        end
         %MAKE STATUS CONSISTENT WITH MATLAB
         bSuccess=~bSuccess;
 
@@ -53,9 +68,8 @@ methods(Static)
         out=Sys.isInstalledC_(cmd);
     end
     function [out,bSuccess]=which(cmd)
-        % XXX
-        out=Sys.whichC_(cmd);
-        %out=Sys.whichCmd_(cmd);
+        %out=Sys.whichC_(cmd); % XXX DOESN"T WORK ON SOME MACHINES?
+        out=Sys.whichCmd_(cmd);
         %
         if isempty(out) || isequal(out,false)
             out=[];
@@ -69,7 +83,11 @@ methods(Static)
         if ispc()
             out=Sys.whoamiCmd_();
         else
-            out=Sys.whoamiC_();
+            try
+                out=Sys.whoamiC_();
+            catch
+                out=Sys.whoamiCmd_();
+            end
         end
     end
     function out = groups()
@@ -108,7 +126,7 @@ methods(Static)
         elseif Sys.islinux
             out='linux';
         elseif isunix
-            out='unix'
+            out='unix';
         end
     end
 end
@@ -171,6 +189,8 @@ methods(Static, Access=private)
         [out,bSuccess]=Sys.run(['which ' cmd]);
         if ~bSuccess
             out=[];
+        else
+            out=out{1};
         end
     end
     function h = hostnameCmd_()

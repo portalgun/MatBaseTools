@@ -44,7 +44,7 @@ methods(Access=private)
         obj.set(Opts);
     end
     function Opts=read_(obj)
-        scopes=['ENV', fliplr(Vec.row(obj.prjs))];
+        scopes=['root', fliplr(Vec.row(obj.prjs))];
         if ~iscell(scopes)
             scopes={scopes};
         end
@@ -67,9 +67,9 @@ methods(Access=private)
     end
     function Opts=read_fun(obj,dire,Opts1,scope,type)
         if ~isempty(type)
-            fname=[dire scope '.' type '.config'];
+            fname=[dire scope '.' type '.cfg'];
         else
-            fname=[dire scope '.config'];
+            fname=[dire scope '.cfg'];
         end
 
         if Fil.exist(fname)
@@ -84,7 +84,7 @@ methods(Access=private)
 
             % RENAME PRJ VARS
             flds=fieldnames(Opts2);
-            if ~strcmp(scope,'ENV')
+            if ~strcmp(scope,'root')
                 for i = 1:length(flds)
                     fld=flds{i};
                     if Env.is_prj_var({fld})
@@ -213,18 +213,25 @@ methods(Static)
             caller=db(2).file;
         end
 
-        [name,prj,prjDir,prjInd,pxInd,remInd,dotInd]=Env.get_prjs(caller,name);
-        if Env.is_prj_var(name)
-            name=Env.prj_str(prj,name);
-        end
+        % NEW, NOT SURE IF GOOD IDEA
+        out=cellfun(@(x) builtin('getenv', Str.Alph.upper(strrep(x,'.','__'))), name,'UniformOutput',false);
+        eInd=cellfun(@isempty,out);
 
-        out=repmat({''},size(name));
-        out(prjInd)=cellfun(@(x) builtin('getenv',x),name(prjInd),'UniformOutput',false);
-        out(pxInd)=cellfun(@(x) builtin('getenv',x),name(pxInd),'UniformOutput',false);
+        if any(eInd)
+            % SEE IF PRJ VARIABLE EXISTS
+            [name,prj,prjDir,prjInd,pxInd,remInd,dotInd]=Env.get_prjs(caller,name); % SLOW
+            if Env.is_prj_var(name)
+                name=Env.prj_str(prj,name);
+            end
 
-        % XXX Unnecessary?
-        if any(remInd)
-            out=Env.etc_eval(name,prj,prjDir,out);
+            out=repmat({''},size(name));
+            out(prjInd)=cellfun(@(x) builtin('getenv',x),name(prjInd),'UniformOutput',false);
+            out(pxInd)=cellfun(@(x) builtin('getenv',x),name(pxInd),'UniformOutput',false);
+
+            % IF NOT, CHECK IF ITS ETC
+            if any(remInd)
+                out=Env.etc_eval(name,prj,prjDir,out);
+            end
         end
 
         out=Env.metaEval(out,varargin{:});
@@ -277,7 +284,7 @@ end
 methods(Static, Access=protected)
     function [name,prj,prjDir,prjInd,pxInd,remInd,dotInd]=get_prjs(caller,name)
         prjRoot=builtin('getenv','PX_PRJS_ROOT');
-        dires=cellfun(@(x) Str.Alph.upper(x),Dir.dirs(prjRoot),'UniformOutput',false);
+        dires=cellfun(@(x) Str.Alph.upper(x),Dir.dirs(prjRoot),'UniformOutput',false); % SLOISH
 
         prj=repmat({''},size(name));
         prjDir=repmat({''},size(name));
@@ -287,7 +294,8 @@ methods(Static, Access=protected)
 
             m=regexp(name(prjInd),'^([A-Z0-9]*)__','tokens');
             prj(prjInd)=cellfun(@(x) [x{:}{:}],m,'UniformOutput',false);
-            prjDir(prjInd)=dires(cellfun(@(x) find(ismember(dires,x)),prj(prjInd)));
+            %[~,ind]=ismember(dires,prj(prjInd))
+            prjDir(prjInd)=dires(cellfun(@(x) find(ismember(dires,x),1,'first'),prj(prjInd)));
             prjDIr(prjInd)=cellfun(@Dir.parse,prjDir(prjInd),'UniformOutput',false);
 
         end
@@ -297,8 +305,10 @@ methods(Static, Access=protected)
 
         end
         remInd=~pxInd & ~prjInd;
+
+        % GET NAME OF PRJ CALLER IS IN
         if any(remInd)
-            [~,p]=VE.isInPrj(caller);
+            [~,p]=VE.isInPrj(caller); % SLOW!!!
             if ~isempty(p)
                 prj(remInd)=repmat({p},sum(remInd),1);
                 prjDir(remInd)=strcat(prjRoot,prj(remInd),filesep);
@@ -365,7 +375,7 @@ methods(Static, Access=protected)
         configDir=builtin('getenv','PX_ETC');
         vars=[];
         re=strcat(prjDir,prj,'(\.(cfg|config))?');
-        bInd=cellfun(@Fil.exist,strcat(prjDir,'.px'));
+        bInd=cellfun(@Fil.exist,strcat(prjDir,'pkg.cfg'));
         % READ FROM LOCAL CONFIG
         if ~any(bInd)
             return
@@ -375,7 +385,7 @@ methods(Static, Access=protected)
         if ~any(gd)
             return
         end
-        files(gd)=strcat(prjDir(gd),'.px');
+        files(gd)=strcat(prjDir(gd),'pkg.cfg');
         gd=cellfun(@Fil.exist,files) & gd;
         if ~any(gd)
             return

@@ -10,20 +10,25 @@ methods(Static)
         end
         if nargin < 3
             sepCol=' ';%char(44);
-            sepRow=newline;
         end
         if nargin < 4
+            sepRow=newline;
+        end
+        if nargin < 5
             alignChar='left';
         end
 
         txt=cell(size(C));
         for i = 1:size(C,2)
             flds=C(:,i);
+            if iscell(flds) && numel(flds)==1 && iscell(flds{1})
+                flds=flds{1};
+            end
             ninds=cellfun(@isnumeric,flds);
             linds=cellfun(@islogical,flds);
             oinds=cellfun(@isobject,flds) | cellfun(@iscell,flds);
             if all(ninds) && ~all(cellfun(@isempty,flds))
-                flds=cellfun(@Num.toStr,flds,'UniformOutput',false);
+                flds=cellfun(@Num.toStr,flds,'UniformOutput',false); %- SLOW
                 flds=split(flds,newline);
             else
                 J=find(ninds);
@@ -65,12 +70,12 @@ methods(Static)
             else
                 sepp=sepCol;
             end
-            txt(:,i)=Cell.space_fun(flds,n,sepp,alignChar);
+            txt(:,i)=Cell.space_fun(flds,n,sepp,alignChar); %- SLOW
         end
         l=size(C,1);
         str=cell(l,1);
         for i = 1:l
-            str{i}=strjoin(txt(i,:),'');
+            str{i}=strjoin(txt(i,:),''); %- Slow
         end
         txt=strjoin(str,sepRow);
 

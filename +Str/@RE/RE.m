@@ -17,7 +17,11 @@ methods(Static)
         end
     end
     function re=combine(res)
-        re=['(' strjoin(res,'|') ')'];
+        if ismac()
+            re=['(' strjoin(res,'|') ')'];
+        else
+            re=['(' strjoin(res,'|') ')'];
+        end
     end
     function out=match(str,re,bIgnoreCase)
         if ~exist('bIngoreCase','var') || isempty(bIgnoreCase)

@@ -4,6 +4,8 @@ properties
    bUUnMatched
    bUParsed
    UsrNames
+   UsrVals
+
    UsrArgs
    UsrPosArgs
    UNestMatch
@@ -44,6 +46,7 @@ properties
    OUTUM
 
    name2usr=containers.Map
+   bInit=1;
 end
 methods(Static,Access=private)
     function P=getP()
@@ -66,7 +69,7 @@ methods(Static,Access=private)
     end
 end
 methods
-    function [obj,out,errors,unmatched]=ArgsCon(OBJ,P,Opts,argsin)
+    function obj=ArgsCon(OBJ,P,Opts,argsin)
         if isempty(Opts)
            Opts=struct();
         end
@@ -75,23 +78,23 @@ methods
 
         %% INIT
         if ~obj.exitflag
-            obj.init(OBJ,P,argsin);
+            if obj.bInit
+                obj.P=ArgsPParser(P,obj);
+            end
         end
 
         %% MAIN
         if ~obj.exitflag
-            obj.main();
+            obj.main(OBJ,argsin);
         end
 
         %% ERRORS
-        errors=obj.return_errors();
-        out=obj.OUT;
-        unmatched=obj.OUTUM;
     end
-    function init(obj,OBJ,P,argsin)
-        obj.OBJ=OBJ;
-        obj.P=ArgsPParser(P,obj);
+    function preUsrParse(obj,argsin)
 
+        if isstruct(argsin)
+            argsin={argsin};
+        end
         if length(argsin) == 1 && isstruct(argsin{1}) && numel(argsin{1}) > 1
             obj.append_error('Detected input struct array with numel > 1.  This is likely due to nested structs in cell. Check your input and try again.');
             obj.exitflag=true;
@@ -110,36 +113,79 @@ methods
                     keys=fieldnames(argsin{1});
                     vals=struct2cell(argsin{1});
 
-                    obj.UsrArgs=containers.Map(keys,vals);
+                    %obj.UsrArgs=containers.Map(keys,vals);
+                    obj.UsrNames=keys;
+                    obj.UsrVals=vals;
                 else
-                    obj.UsrArgs=containers.Map();
+                    %obj.UsrArgs=containers.Map();
                 end
             case 'dict'
-                obj.UsrArgs=argsin{1};
+                %obj.UsrArgs=argsin{1};
+                obj.UsrVals=argsin{1}.vals;
+                obj.UsrNames=argsin{1}.keys;
                 obj.bUDict=true;
             otherwise
                 if ~isempty(argsin{1})
                     error('TODO')
                 end
-                obj.UsrArgs=containers.Map;
+                %obj.UsrArgs=containers.Map;
             end
 
         else
             obj.bNotArgIn=false;
 
-            [keys,vals,obj.UsrPosArgs,obj.nPosArgs]=Args.pairsToKeysVals(argsin{:});
-            vals=cellfun(@Args.cellparsefun,vals,'UniformOutput',false);
+            [keys,vals,~,obj.nPosArgs]=Args.pairsToKeysVals(argsin{:});
+            obj.UsrVals=vals';
+            obj.UsrNames=keys';
+            %vals
+            %vals=cellfun(@Args.cellparsefun,vals,'UniformOutput',false);
 
-            obj.UsrArgs=containers.Map(keys,vals);
+            %obj.UsrArgs=containers.Map(keys,vals);
+        end
+        if isempty(obj.UsrNames)
+            obj.UsrNames={};
+            obj.UsrVals={};
         end
     end
-    function main(obj)
 
-        obj.P.parse();
+    function out=parse(obj,OBJ,argsin)
+        obj.main(OBJ,argsin);
+        errors=obj.return_errors();
+        out=obj.OUT;
+        unmatched=obj.OUTUM;
+        obj.OBJ=[];
+        if ~isempty(errors); throwAsCaller(errors); end
+    end
+    function main(obj,OBJ,argsin)
+        obj.OUT=[];
+        obj.OUT_S=[];
+        obj.OUTUM=[];
+
+        obj.nUnm=[];
+        obj.bUUnMatched=[];
+        obj.bUParsed=[];
+        obj.UsrNames=[];
+        %obj.UsrArgs=[];
+        obj.UsrPosArgs=[];
+        obj.UNestMatch=[];
+        obj.OBJ=OBJ;
+        obj.preUsrParse(argsin);
+
         if obj.exitflag; return; end
+
+        %obj.P.parse(); %HERE
+
+        if obj.bInit
+            obj.P.parse();
+            if obj.exitflag; return; end
+        end
+        obj.bInit=false;
+
+        %obj.P.bTestInd=~cellfun(@isempty,obj.P.P(:,3));
 
         obj.parse_usr_basic();
         if obj.exitflag; return; end
+
 
         % INIT MATCHIGN
         obj.UsrNames=Vec.col(obj.UsrNames);
@@ -150,6 +196,9 @@ methods
         obj.nUnm=0;
 
         obj.get_usr_unmatched();
+
+        %assignin('base','bUUn',obj.bUUnMatched)
+        %assignin('base','PInd',obj.PIndMatched)
 
         if any(obj.nUnm)
             obj.P.get_PNest();
@@ -177,11 +226,9 @@ methods
         obj.convert_output();
         if obj.exitflag; return; end
 
-        if obj.exitflag; return; end
-
-        if obj.nout >= 3
-            obj.get_toggler();
-        end
+        %if obj.nout >= 3
+        %    obj.get_toggler();
+        %end
     end
     function expand_contract(obj)
     % CONTRACT EXAMPLE
@@ -191,50 +238,86 @@ methods
 
         bStructs=structfun(@isstruct,obj.OUT);
 
-        [bExpand,bContract]=obj.P.get_expand_contract_matches();
+        %obj.P.get_expand_contract_matches();
+        %[bExpand,bContract]=obj.P.get_expand_contract_matches();
 
-        if any(bExpand)
+        %if any(obj.P.bExapnd)
         %    match=obj.P.ExpandMatch(bExpand);
             % struct is preffered
             %'e'
             %pname
-        end
+        %end
 
-        if any(bStructs) && any(bContract)
-            cellfun(@(x,y) contract_fun(obj,x,y),obj.P.ContractMatch(bContract),obj.P.aliases(bContract));
-            %names=obj.P.names(bContract);
-        end
-        obj.combine_errors();
-
-        function contract_fun(obj,minds,aliases)
-            PUnMatched=obj.P.names(~ismember(1:numel(obj.P.names),obj.PIndMatched));
-
-            % thing to set
-            pind=minds(1);
-            name=obj.P.names{pind};
-            if ~ismember(name,PUnMatched)
+        if any(bStructs) && any(obj.P.bContractB)
+            bUnMatched=~ismember((1:numel(obj.P.names))',obj.PIndMatched);
+            Bind=bUnMatched & obj.P.bContractB;
+            if ~any(Bind)
                 return
             end
 
-            % struct match to aliases - field to get value from
-            aliases=obj.P.aliases{pind}; % tmp
-            strName=aliases{minds(2)};
-            spl=strsplit(strName,'.');
+            %pinds=obj.P.ContractMatch12(Bind,1);
+            %ainds=num2cell(obj.P.ContractMatch12(Bind,2));
+            %names=obj.P.names(pinds);
+            %aliases=obj.P.aliases(pinds);
+            %strNames=cellfun(@(x,y) x(y),aliases,ainds,'UniformOutput',false);
 
-            % GET VALUE IF IT EXISTS
+            cellfun(@(x) contract_fun(obj,x),obj.P.ContractMatch(Bind));
+            %cellfun(@(x,y,z) contract_fun2(obj,x,y,z), strNames,num2cell(pinds),names);
+            %names=obj.P.names(bContract);
+            obj.combine_errors();
+        end
+        function contract_fun2(obj,strName,pind,name)
+            spl = regexp(strName, '\.', 'split');
             try
-                val=getfield(obj.OUT,spl{:});
+                val=getfield_fast(obj.OUT,spl{:});
             catch
                 return
             end
 
-            exiflag=obj.run_test(pind,strName,val);
-            if exiflag
+            if obj.P.bTestInd(pind)
+                test=obj.P.tests(pind);
+                exiflag=obj.run_test(test,strName,val);
+                if exiflag
+                    return
+                end
+            end
+
+            obj.OUT.(name)=val;
+
+            % RM
+            str=strjoin(spl(1:end-1),'.');
+            cmd=sprintf('obj.OUT.%s=rmfield(obj.OUT.%s,spl{end});',str,str);
+            eval(cmd);
+        end
+        function contract_fun(obj,minds)
+
+            % thing to set
+            pind=minds(1);
+            name=obj.P.names{pind};
+
+            % struct match to aliases - field to get value from
+            aliases=obj.P.aliases{pind}; % tmp
+            strName=aliases{minds(2)};
+            spl = regexp(strName, '\.', 'split');
+
+            % GET VALUE IF IT EXISTS
+            try
+                val=getfield_fast(obj.OUT,spl{:});
+            catch
                 return
             end
 
+            if obj.P.bTestInd(pind)
+                test=obj.P.tests(pind);
+                exiflag=obj.run_test(test,strName,val);
+                if exiflag
+                    return
+                end
+            end
+
             % SET
-            obj.OUT=setfield(obj.OUT,name,val);
+            %obj.OUT=setfield(obj.OUT,name,val);
+            obj.OUT.(name)=val;
 
             % RM
             str=strjoin(spl(1:end-1),'.');
@@ -244,19 +327,21 @@ methods
     end
     function parse_own(obj)
         oP=Args.getP();
-        flds=fieldnames(obj.Opts);
-        seen={};
+        flds=sort(fieldnames(obj.Opts));
+        seen='';
+        [bP,Pc]=ismember_cell(flds,oP(:,1));
         for i = 1:length(flds)
             fld=flds{i};
             val=obj.Opts.(fld);
-            if ismember(fld,oP(:,1))
-                p=oP(ismember(oP(:,1),fld),:);
+            if bP(i)
+                %p=oP(ismember_cell(oP(:,1),fld),:);
+                p=oP(Pc(i),:);
                 name=p{1};
-                if ismember(name,seen)
+                if strcmp(name,seen)
                     obj.errorMultiple(fld,true);
                     continue
                 end
-                seen{end+1}=name;
+                seen=name;
 
                 fun=str2func(p{3});
                 if ~fun(val)
@@ -279,132 +364,36 @@ methods
         % XXX match posargs
         % expand user options to structs if needed
         % e.g.  prop -> Opts.prop
-        obj.UsrNames=keys(obj.UsrArgs);
+        %obj.UsrNames=keys(obj.UsrArgs);
         if obj.nPosArgs > 0
             obj.UsrPosArgs
         end
 
     end
-    function handle_structs(obj)
-        % XXX rm
-        % NOTE BELOW UNUSED
-
-        %obj.UsrNames=keys(obj.UsrArgs);
-        %  change user name -> expand
-        for i = 1:length(obj.UsrNames)
-            uname=obj.UsrNames{i};
-
-            if ~ismember(uname,obj.P.uNest3) % anything unmatched can be expanded
-                obj.expand_struct(uname);
-            end
-        end
-
-        %  change user val -> contract
-        obj.UsrNames=keys(obj.UsrArgs);
-        for i = 1:length(obj.P.names)
-            pname=obj.P.names{i};
-
-            % FIND ANY P THAT DOESNT HAVE A USER MATCH
-            if ~ismember(pname,obj.UsrNames)
-                obj.contract_struct(pname);
-            end
-        end
-        obj.UsrNames=keys(obj.UsrArgs);
-    end
-    function contract_struct(obj,pname)
-        % XXX rm
-        % EXPAND NAME TO ALIASES WITH '.'
-        pAliases=obj.name2aliases(pname);
-        ind=contains(pAliases,'.');
-        if isempty(pAliases) || ~any(ind)
+    function get_usr_unmatched(obj)
+        bind=ismember_cell(obj.UsrNames,obj.P.allAliases); % SLOW
+        if isempty(obj.UsrNames)
             return
         end
-        paliases=pAliases(ind);
 
-        for j = 1:length(aliases)
-            palias=paliases{j};
 
-            spl=strsplit(palias,'.');
-
-            % XXX
-            mtchs=find(ismember(spl,obj.P.names));
-            %mtchs=find(ismember(spl,obj.UsrNames));
-            if isempty(mtchs)
-                continue
-            elseif numel(mtchs)==1
-                ufld=spl{mtchs};
-            else
-                % XXX CHOOSE
-                dk
-            end
-            if ~ismember(ufld,obj.UsrNames)
-                continue
-            end
-
-            % GET VAL
-            if obj.bUDict
-                TODO
-            else
-                val=obj.UsrArgs(ufld);
-            end
-
-            % UNNEST STRUCT VAL
-            if isa(val,'dict')
-                TODO
-            elseif isstruct(val)
-                obj.UsrArgs(name)=val.(name);
-                val=rmfield(val,name);
-            end
-            obj.UsrArgs(ufld)=val;
-
+        if islogical(obj.PIndMatched)
+            obj.PIndMatched=double(obj.PIndMatched);
         end
-    end
-    function expand_struct(obj,ufld)
-        % XXX rm
-        val=obj.get_user_val(ufld);
-        if isstruct(val)
-            % expanded field
-            flds=cellfun(@(x) [ufld x],Struct.getFields(val),'UniformOutput',false);
-            newflds=cellfun(@(x) strjoin(x,'.'),flds,'UniformOutput',false);
-            if ~any(cellfun(@(x) ismember(x,obj.P.allAliases),newflds))
-                return
-            end
-            % unnested value
-            newvals=cellfun(@(x) getfield(val,x{2:end}),flds,'UniformOutput',false);
+        bPIM=obj.PIndMatched >= 1;
 
-            % assign
-            obj.UsrArgs=remove(obj.UsrArgs,fld);
-            for j = 1:length(newflds)
-                obj.UsrArgs(newflds{j})=newvals{j};
-            end
-        elseif isa(val,'dict')
-            TODO
+        obj.PIndMatched(~bPIM & obj.UNestMatch)=double(obj.UNestMatch(~bPIM & obj.UNestMatch));
+
+        bPimSet=~bPIM & ~obj.UNestMatch & bind;
+        if obj.P.bAlias
+            [~,obj.PIndMatched(bPimSet)]=cellfun(@(x) ismember_cell(obj.P.alias2name(x),obj.P.names),obj.UsrNames(bPimSet)); % SLOW
+        else
+            [~,obj.PIndMatched(bPimSet)]=cellfun(@(x) ismember_cell(x,obj.P.names),obj.UsrNames(bPimSet));
+            %[~,obj.PIndMatched(bPimSet)]=ismember_cell(obj.UsrNames(bPimSet),obj.P.names); SLOWER SOMEHOW
         end
-    end
-    function get_usr_unmatched(obj)
 
-        [obj.bUUnMatched,obj.PIndMatched]=cellfun(@(x,y,z) nest_fun(obj,x,y,z),obj.UsrNames,num2cell(obj.UNestMatch),num2cell(obj.PIndMatched));
-        function [bUUm,PIM]=nest_fun(obj,uname,UNestMatch,PIM)
-
-            if PIM >= 1
-                bUUm=false;
-                return
-            elseif UNestMatch
-                bUUm=false;
-                PIM=UNestMatch;
-            elseif ismember(uname,obj.P.allAliases)
-                bUUm=false;
-                name=obj.P.alias2name(uname);
-                PIM=find(ismember(obj.P.names,name));
-            else
-                obj.nUnm=obj.nUnm+1;
-                %fkey=['u' num2str(obj.nUnm)];
-                %obj.P.f2name(fkey)=uname;
-                %obj.P.alias2f(uname)=fkey;
-                bUUm=true;
-                PIM=0;
-            end
-        end
+        obj.bUUnMatched=~bPIM & ~obj.UNestMatch & ~bind;
+        obj.nUnm=sum(obj.bUUnMatched);
     end
 %% MAIN
     function handle_unmatched(obj)
@@ -413,8 +402,8 @@ methods
         if obj.nUnm == 0
             return
         end
-        UM=obj.UsrNames{obj.bUUnMatched};
-        if ~obj.IgnoreUnmatched
+        UM=obj.UsrNames(obj.bUUnMatched);
+        if ~obj.IgnoreUnmatched && ~obj.KeepUnmatched
             if iscell(UM)
                 um=strjoin(UM,newline);
             else
@@ -422,77 +411,67 @@ methods
             end
             obj.append_error(sprintf('Unmatched paramters:\n%s',um));
         else
+            obj.OUTUM=struct();
             for i = 1:length(UM)
-                obj.OUTUM.(UM{i})=obj.UsrArgs(UM{i});
+                obj.OUTUM.(UM{i})=obj.get_user_val(UM{i});
             end
         end
-    end
-    function parse_main_old(obj)
-        obj.IP=inputParser;
-        obj.IP.CaseSensitive=false;
-        obj.IP.KeepUnmatched=true;
-        obj.IP.StructExpand=true;
-        cellfun(@(x,y,z) obj.IP.addParameter(x,y,z),obj.P.F,obj.P.defaults,obj.P.tests);
-        try
-            %obj.IP.parse(args{:});
-        catch ME
-            ME=Obj.struct(ME);
-            m=Str.RE.match(ME.message,'[uf][0-9]+');
-            %ind=str2double(m(2:end));
-            msg=regexprep(ME.message,'[uf][0-9]+',obj.P.f2name(m));
-            obj.append_error(msg);
-        end
-        obj.IP=Obj.struct(obj.IP);
     end
     function parse_usr_matched(obj)
         % INIT OUT WITH DEFAULTS
-        flds=obj.P.names;
-        for i = 1:length(flds)
-            if contains(flds{i},'.')
-                spl=strsplit(flds{i},'.');
-                obj.OUT=setfield(obj.OUT,spl{:},obj.P.defaults{i});
-            else
-                obj.OUT.(flds{i})=obj.P.defaults{i};
-            end
-        end
+        obj.OUT=obj.P.OUTDEF;
 
-        for u = 1:length(obj.UsrNames)
-            if obj.bUUnMatched(u) || obj.bUParsed(u)
-                continue
-            end
-            PInd=obj.PIndMatched(u);
+        GdInd=~obj.bUUnMatched & ~obj.bUParsed;
+        unames=obj.UsrNames(GdInd);
+        vals=obj.UsrVals(GdInd);
 
-            uname=obj.UsrNames{u};
+        pinds=obj.PIndMatched(GdInd);
+        pnames=obj.P.names(pinds);
+        tests=obj.P.tests(pinds);
 
-            val=obj.get_user_val(uname);
-            pname=obj.P.names(PInd);
+        bTest=obj.P.bTestInd(pinds);
+        bUM=logical(Vec.col(obj.UNestMatch(GdInd)));
+        %bUM=obj.UNestMatch(GdInd);
+        %
+        %bStruct=(~bUM & contains(pnames,'.'));
 
-            exiflag=obj.run_test(PInd,uname,val);
-            if exiflag
-                continue
-            end
+        bP=~(obj.P.bOptional(pinds) & cellfun(@isempty,vals));
 
-            % SET NESTED
-            if obj.UNestMatch(u)
-                newName=obj.P.name2nestName(uname,obj.UNestMatch(u));
-                flds=strsplit(newName,'.');
-                obj.OUT=setfield(obj.OUT,flds{:},val);
-            elseif contains(pname{1},'.')
-                flds=strsplit(pname{1},'.');
-                obj.OUT=setfield(obj.OUT,flds{:},val);
-            else
-                obj.OUT.(pname{1})=val;
-            end
+        types=ones(size(bUM))*3;
+        types(~bUM & obj.P.bStruct(pinds) & ~obj.P.bContractB(pinds))=2;
+        types(bUM)=1;
+        types(bTest)=types(bTest)*-1;
 
-
-        end
-        obj.combine_errors();
+        cellfun(@obj.set_fun,vals(bP),tests(bP),pnames(bP),unames(bP),num2cell(types(bP)));
 
     end
-    function exitflag=run_test(obj,PInd,uname,val)
+    function set_fun(obj,val,test,pname,uname,typ)
+        if sign(typ)<0
+            exiflag=obj.run_test(test,uname,val);
+            if exiflag
+                return
+            end
+        end
+        typ=abs(typ);
+
+        if typ==1
+            newName=obj.P.name2nestName(uname,UM);
+            flds = regexp(newName, '\.', 'split');
+
+            obj.OUT = builtin('subsasgn', obj.OUT, struct('type',repmat({'.'},1,numel(flds)),'subs',flds), val);
+            obj.OUT=setfield(obj.OUT,flds{:},val);
+        elseif typ==2
+            flds = regexp(pname, '\.', 'split');
+
+            obj.OUT = builtin('subsasgn', obj.OUT, struct('type',repmat({'.'},1,numel(flds)),'subs',flds), val);
+            obj.OUT=setfield(obj.OUT,flds{:},val);
+        elseif typ==3
+            obj.OUT.(pname)=val;
+        end
+    end
+    function exitflag=run_test(obj,test,uname,val)
         exitflag=false;
-        test=obj.P.tests(PInd);
-        if numel(test) == 1 && ~iscell(test{1})
+        if numel(test) == 1 && iscell(test) && numel(test{1})==1
             test=test{1};
         end
 
@@ -524,38 +503,8 @@ methods
             val={[]};
         end
     end
-    function [nest,nestrmflds]=get_nest(obj)
-        nest=obj.P.nest3;
-        nest(cellfun(@isempty,nest(:,1)),:)=[];
-        cind=cellfun(@iscell,nest(:,1));
-        if any(cind)
-            ind=find(cind);
-            nn={};
-            for i = 1:length(ind)
-                names=nest{i,1};
-                if iscell(names)
-                    names=Vec.col(names);
-                    N=numel(names);
-                else
-                    N=1;
-                end
-                val=nest(i,2:end);
-
-                n=[names repmat(val,N,1) repmat({i},N,1)];
-                nn=[nn; n];
-            end
-            iind=find(~cind);
-            if ~isempty(iind)
-                new=[nest(~cind,:) num2cell(iind)];
-                nest=[new; nn];
-            else
-                nest=nn;
-            end
-        end
-        nestrmflds={};
-    end
     function parse_groups(obj)
-        if isempty(obj.P.uGroups) || all(ismember(obj.P.uGroups(1),[0 -1]))
+        if isempty(obj.P.uGroups) || all(ismember_cell(obj.P.uGroups(1),[0 -1]))
             return
         end
         names=obj.P.names;
@@ -565,9 +514,9 @@ methods
         A=[obj.UsrArgs zeros(length(obj.UsrArgs),4)];
         for i = 1:length(obj.uGroups)
             u=obj.uGroups(i);
-            bGroup=cellfun(@(x) ismember(u,x),obj.groups);
+            bGroup=cellfun(@(x) ismember_cell(u,x),obj.groups);
             n=cellfun(@(x) ~isempty(obj.get_result(x)),names(bGroup));
-            Ai=find(ismember(A(:,1),abs(u)));
+            Ai=find(ismember_cell(A(:,1),abs(u)));
             if u >= 1
                 c=2; % req
             elseif u <= 0
@@ -649,144 +598,10 @@ methods
             end
         end
     end
-    function rm_nest(obj,nestrmflds)
-        % XXX RM
-        % RM NESTED SO NOT USED IN UM CASES
-        if isempty(nestrmflds)
-            return
-        end
-        if any(cind)
-            fun=@(x) ~isempty(x) && ~iscell(x) && any(ismember(x,nestrmflds));
-            fun2=@(y) ~isempty(y) && iscell(y) && any(cellfun(@(x) fun(x) ,y));
-            %
-            ind=cellfun(@(x) fun(x),obj.P.nest3(:,1)) | cellfun(fun2,obj.P.nest3(:,1));
-        else
-            ind=cellfun(@(x) ~isempty(x) && ismember(x,nestrmflds),obj.P.nest3(:,1));
-        end
-        obj.P.nest3(ind,:)={[]};
-    end
 
-    function [val,nestrmflds]=parse_nested_pre(obj,uname,val,nest,nestrmflds)
-        % XXX rm
-        % PARSE NESTED
-        if ~ismember(uname,nest(:,1))
-            return
-        end
-        ind=ismember(nest(:,1),uname);
-        o=nest{ind,2};
-        if ~ischar(o) || ~isa(val,o)
-            p=obj.get_other_P(o);
-            opts=struct('nout',obj.nout,'caller',o,'stack',obj.stack,'IgnoreUnmatched',obj.IgnoreUnmatched,'KeepUnmatched',obj.KeepUnmatched,'bNested',true);
-            [val,out]=Args.parse_internal([],p,opts,val); % HERE
-            if out.exitflag && nest{ind,3}
-                obj.errors=[obj.errors; out.errors];
-                obj.exitflag=true;
-                return
-            end
-        end
-        nestrmflds{end+1}=uname;
-    end
-
-    function parse_nested(obj)
-        % XXX RM
-        umfflds=fieldnames(obj.IP.Unmatched);
-        umffldsO=umfflds;
-        umflds=cellfun(@(x) obj.P.f2name(x) ,umfflds,'UniformOutput',false);
-        for i = 1:size(obj.P.nest3,1)
-            if isempty(obj.P.nest3{i,1})
-                continue
-            end
-            fld=obj.P.nest3{i,1};
-            o=obj.P.nest3{i,2};
-            [p,cls]=obj.get_nested_P(o);
-            if obj.exitflag; return; end
-
-            if iscell(fld)
-                fld=fld{1};
-            end
-            ffld=obj.P.alias2f(fld);
-            %opts=obj.get_result_f(ffld);
-            opts=PStruct();
-
-            newflds=p(:,1);
-            if ~isempty(umflds)
-
-                % POSSIBLE REP.aCEMENTS
-                reps={''};
-                if ~isempty(cls)
-                    reps=[reps [cls '.']];
-                end
-
-                for j = 1:length(reps)
-                    [umflds,umfflds]=obj.um_fun(newflds,umflds,umfflds,reps{j},opts);
-                    if isempty(umflds)
-                        break
-                    end
-                end
-            end
-
-            Opts=struct('nout',obj.nout,'caller',o,'stack',obj.stack,'IgnoreUnmatched',obj.IgnoreUnmatched,'KeepUnmatched',obj.KeepUnmatched,'bNested',true,'bIgnoreGroups',true);
-            [val,out]=Args.parse_internal([],p,Opts,opts{:}); % HERE
-            out=Args.parse([],p,opts{:});
-            obj.set_ip_result_f(ffld,out);
-        end
-        %obj.IP.Unmatched
-    end
-    function [umflds,umfflds]=um_fun(obj,newflds,umflds,umfflds,rep,opts)
-        %  XXXRM
-        if ~isempty(rep)
-            newflds=strcat(rep,newflds);
-        end
-        inds=ismember(umflds,newflds);
-        if ~any(inds)
-            return
-        end
-        flds=umflds(inds);
-        fflds=umfflds(inds);
-        vals=cellfun(@(x) obj.IP.Unmatched.(x),fflds,'UniformOutput',false);
-
-        umflds(inds)=[];
-        umfflds(inds)=[];
-        obj.IP.Unmatched=rmfield(obj.IP.Unmatched,fflds);
-
-        if isstruct(opts)
-            cellfun(@(f,v) um_struct_fun(opts,f,v),flds,vals,'UniformOutput',false);
-        elseif isa(opts,'dict')
-            cellfun(@(f,v) um_dict_fun(opts,f,v),flds,vals);
-        elseif iscell(opts,f,v)
-            cellfun(@(f,v) um_cell_fun(opts,f,v),flds,vals);
-        end
-        function opts=um_struct_fun(opts,fld,val)
-            if contains(fld,'.')
-                spl=strsplit(fld,'.');
-                opts=setfield(opts,spl{:},val);
-            else
-                opts.(fld)=val;
-            end
-        end
-        function opts=um_dict_fun(opts,fld,val)
-            opts(fld)=val;
-        end
-        function opts=um_cell_fun(opts,fld,val)
-            opts{end+1}=fld;
-            opts{end+1}=val;
-        end
-    end
 %% UTIL
     function val=get_user_val(obj,name)
-        if obj.bUDict
-            val=obj.UsrArgs{name};
-        else
-            val=obj.UsrArgs(name);
-        end
-    end
-    function aliases=name2aliases(obj,name)
-        aliases=obj.P.name2aliases(name);
-        if length(aliases) == 1
-            aliases={};
-        else
-            aliases=aliases(2:end);
-        end
+        val=[obj.UsrVals{ismember_cell(obj.UsrNames,name)}];
     end
     function name=alias2name(obj,alias)
         aliases=obj.P.name2aliases(alias);
@@ -794,32 +609,7 @@ methods
     end
 %% RESULTS
     function out=get_result(obj,fld)
-        if iscell(fld)
-            fld=fld{1};
-        end
         out=obj.get_result_f(obj.P.alias2f(fld));
-    end
-    function set_result_f(obj,DEST,fld)
-        flds=strsplit(obj.P.f2name(fld),'.');
-        obj.(DEST)=setfield(obj.(DEST),flds{:},obj.get_result_f(fld));
-
-        %obj.OUT.(obj.P.f2name(flds{i}))=obj.get_result_f(flds{i});
-    end
-    function out=get_result_f(obj,fld)
-        out=obj.IP.Results.(fld);
-        %if ismember(fld,obj.IP.UsingDefaults)
-        %    out=obj.IP.Results.(fld){1};
-        %else
-        %    out=obj.IP.Results.(fld);
-        %end
-    end
-    function set_ip_result_f(obj,fld,val)
-        obj.IP.Results.(fld)=val;
-        %if ismember(fld,obj.IP.UsingDefaults)
-        %    obj.IP.Results.(fld){1}=val;
-        %else
-        %     obj.IP.Results.(fld)=val;
-        %end
     end
 %% OUT
     function convert_output(obj)
@@ -844,20 +634,19 @@ methods
                 end
         end
     end
-    function out_as_object(obj);
+    function out_as_object(obj)
         flds=obj.P.names;
-        out=obj.OUT;
-        obj.OUT=obj.OBJ;
+        bContainer=isa(obj.OBJ,'Container');
         for i = 1:length(flds)
-            obj.OUT.(flds{i})=out.(flds{i});
+            %obj.OBJ= builtin('subsasgn', obj.OBJ, struct('type','.','subs',flds{i}), obj.OUT.(flds{i}));
+            if ~bContainer && isempty(obj.OUT.(flds{i}))
+                continue %TODO MAKE THIS AN OPTION NOT IMPLIED
+            end
+            obj.OBJ.(flds{i})=obj.OUT.(flds{i}); % WHY SLOW?
         end
 
-        %flds=fieldnames(obj.OUTUM);
-        %out=obj.OUTUM;
-        %obj.OUT=struct();
-        %for i = 1:length(flds)
-        %    obj.OUTUM=out.(flds{i});
-        %end
+        obj.OUT=obj.OBJ;
+
     end
     function out_as_cell(obj)
         obj.OUT=[fieldnames(obj.OUT) struct2cell(obj.OUT)];
@@ -875,16 +664,6 @@ methods
         else
             obj.OUTUM=dict(true,obj.OUTUM(:,1),obj.OUTUM(:,2));
         end
-
-        %out=obj.IP.Results;
-        %flds=fieldnames(out);
-        %obj.OUT=dict(true);
-        %for i = 1:length(flds)
-        %    obj.set_result_f('OUT',flds{i});
-        %end
-
-        %flds=fieldnames(obj.IP.Unmatched);
-        %obj.OUTUM=dict(true);
 
     end
 %% TOGGLER
@@ -906,6 +685,9 @@ methods
             elseif isstruct(obj.OUT)
                 if isfield(obj.OUT,names{i})
                     vals{i}=obj.OUT.(names{i});
+                elseif contains(names{i},'.')
+                    flds=strsplit(names{i},'.');
+                    vals{i}=getfield_fast(obj.OUT,flds{:});
                 else
                     vals{i}=[];
                 end

@@ -3,5 +3,5 @@ function out=tabify(str,nspaces)
         nspaces=2;
     end
     s=repmat(' ',1,nspaces);
-    out=['  ' strrep(str,newline,[newline '  '])];
+    out=[s strrep(str,newline,[newline s])];
 end

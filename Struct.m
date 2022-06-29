@@ -1,5 +1,28 @@
 classdef Struct < handle
 methods(Static)
+    function KEYS=getFields(S)
+        KEYS={};
+        FLDS={};
+        recurse_fun(S,FLDS);
+
+        % XXX
+        function recurse_fun(S,FLDS)
+            flds=fieldnames(S);
+            n=length(flds);
+            for i = 1:n
+                if isstruct(S.(flds{i}))
+                    recurse_fun(S.(flds{i}),[FLDS flds{i}]);
+                else
+                    KEYS{1,end+1}=[FLDS flds{i}];
+                end
+            end
+            % XXX
+        end
+    end
+    function strs=flds2strings(S)
+        flds=Struct.getFields(S);
+        strs=cellfun(@(x) strjoin(x,'.'),flds,'UniformOutput',false);
+    end
     function vals=arrSelect(S,fld, bInd)
         if nargin < 3
             vals={S.(fld)};

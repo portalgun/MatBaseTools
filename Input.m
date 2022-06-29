@@ -4,7 +4,6 @@ classdef Input < handle
 methods(Static)
     function out = read(str,varargin)
         cmd=[ 'input(''' str ''',''' varargin{:} ''')'];
-        cmd
         com.mathworks.mlservices.MLExecuteServices.consoleEval(cmd);
     end
     function out = yn(question)

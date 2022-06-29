@@ -3,6 +3,9 @@ methods(Static)
     function out=ceilFix(in)
         out=ceil(abs(in)).*sign(in);
     end
+    function out=logn(n,a)
+        out = log(n) ./ log(a);
+    end
     function n =nSig(x)
 
         if any( ~isnumeric(x) | ~isfinite(x) | isa(x,'uint64') )
@@ -25,6 +28,9 @@ methods(Static)
         out=floor(log10(abs(in)));
     end
     function [float,exp]=toSci(in)
+        if ~strcmp(class(in),'double')
+            in=double(in);
+        end
         float=in/Num.mag(in);
         exp=Num.sciMag(in);
 
@@ -68,13 +74,9 @@ methods(Static)
         end
     end
     function out=is(in,key)
-        if ~isnumeric(in)
-            out=0;
-            return
-        end
-        out=ismember(class(in), Num.typeSet());
+        out=isnumeric(in) || islogical(in);
 
-        if ~exist('key','var') || isempty(key)
+        if ~nargin < 2 || isempty(key)
             return
         elseif strcmp(key,'all')
             out=all(out);
@@ -92,7 +94,7 @@ methods(Static)
         end
         out=isequal(in,1) | isequal(in,0);
 
-        if ~exist('key','var') || isempty(key)
+        if ~nargin < 2 || isempty(key)
             return
         elseif strcmp(key,'all')
             out=all(out);
@@ -137,6 +139,9 @@ methods(Static)
             ,'uint64'...
         };
     end
+    function siz=toSizeStr(val)
+        siz=['[' strrep(Num.toStr(val),',',' x ') ']'];
+    end
     function str=toStr(num,n,bBracket,bSpace,sciCrit)
         % n - sig dec digits
         if islogical(num)
@@ -146,6 +151,10 @@ methods(Static)
             str='';
             return
         end
+        if all(all(num==0)) && size(num,1)==1
+            num=[repmat('0,',1,numel(num)-1) '0'];
+        end
+
         if exist('n','var') && ~isempty(n) && n~=0
             n=min(max(Num.nSigDec(num),[],'all'),n);
             n={['%.' num2str(n) 'f ']};

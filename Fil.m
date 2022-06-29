@@ -85,8 +85,11 @@ methods(Static)
     end
 %% PARTS
     function [varargout]=parts(name)
-        [dire,~,~]=fileparts(name);
-        dire=Dir.parse(dire);
+        dire=Fil.fpartsdir(name);
+        %dire=Dir.parse(dire);
+        if dire(end) ~= filesep
+            dire=[dire filesep];
+        end
         varargout{1}=dire;
         if nargout == 1
             return
@@ -107,6 +110,69 @@ methods(Static)
         end
         varargout{3}=regexprep(name,Name,'');
     end
+    function out=cdate(fname)
+        if iscell(fname)
+            fname=strjoin(fname,'  ');
+        end
+        if ismac
+            str=['stat -f ''%SB'' -t ''%s'' '  fname ];
+            [bStat,o]=unix(str);
+        else
+            [bStat,o]=unix(['stat -c ''%W'' ' fname]);
+        end
+        if ~bStat
+            out=Vec.col(cellfun(@str2double,strsplit(o(1:end-1),newline)));
+        else
+            out=[];
+        end
+    end
+    function pathstr=fpartsdir(file)
+        pathstr = '';
+
+        if ~ischar(file)
+            error(message('MATLAB:fileparts:MustBeChar'));
+        elseif isempty(file) % isrow('') returns false, do this check first
+            return;
+        elseif ~isrow(file)
+            error(message('MATLAB:fileparts:MustBeChar'));
+        end
+        if isunix    % UNIX
+            ind = find(file == '/', 1, 'last');
+            if ~isempty(ind)
+                pathstr = file(1:ind-1);
+
+                % Do not forget to add filesep when in the root filesystem
+                if isempty(deblank(pathstr))
+                    pathstr = '/';
+                end
+            end
+        elseif ispc
+            ind = find(file == '/'|file == '\', 1, 'last');
+            if isempty(ind)
+                ind = find(file == ':', 1, 'last');
+                if ~isempty(ind)
+                    pathstr = file(1:ind);
+                end
+            else
+                if ind == 2 && (file(1) == '\' || file(1) == '/')
+                    %special case for UNC server
+                    pathstr =  file;
+                    ind = length(file);
+                else
+                    pathstr = file(1:ind-1);
+                end
+            end
+            if ~isempty(ind)
+                if ~isempty(pathstr) && pathstr(end)==':' && (length(pathstr)>2 || (length(file) >=3 && file(3) == '\'))
+                        %don't append to D: like which is volume path on windows
+                    pathstr = [pathstr '\'];
+                elseif isempty(deblank(pathstr))
+                    pathstr = '\';
+                end
+            end
+        end
+    end
+
     function [Name]=name(fname)
         [~,Name]=Fil.parts(fname);
     end

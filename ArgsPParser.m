@@ -1,5 +1,6 @@
 classdef ArgsPParser < handle
 properties
+   OUTDEF
    P
    PNest
    nestNames
@@ -13,26 +14,33 @@ properties
    % P properties
    bDefault=false
    bTest=false
+   bTestInd
+   bAlias
    bFlag=false
 
    ExpandMatch
    ContractMatch
+   ContractMatch12
 
    F
    %1
    allAliases
    names
+   namesFlds
    aliases
-   alias2name
-   name2aliases
+   d_alias2name
+   d_name2aliases
 
+   cls1
    bNest1
    bNest1_1
    uNest1={}
    bCopy
+   bStruct
    position
    bExpand
    bContract
+   bContractB
 
    %2
    defaults
@@ -66,18 +74,19 @@ methods
         [n,m]=size(obj.P);
 
         obj.bDefault=m >= 2;
-        obj.bTest=m >= 3;
+        obj.bTestInd=~cellfun(@isempty,obj.P(:,3));
+        obj.bTest=m >= 3 || all(bTestInd);
         obj.bFlag=m >= 4;
 
-        obj.F=arrayfun(@(x) ['f' num2str(x)],(1:n)','UniformOutput',false);
+        %obj.F=arrayfun(@(x) ['f' num2str(x)],(1:n)','UniformOutput',false);
 
         % 4
         obj.parse4(); % 3 depends on 4
 
         % 1 & 3
         obj.parse3_flags(); % 3 & 1 interact
-        obj.parse1();
-        obj.parse3();
+        obj.parse1(); % GET DICTS
+        obj.parse3(); % GET TOGGLES
 
         % 2
         if obj.bDefault
@@ -86,12 +95,26 @@ methods
             obj.defaults=cell(n,1);
         end
 
+        obj.initOut();
+        obj.get_expand_contract_matches();
         %obj.get_PNest();
+    end
+    function initOut(obj)
+        flds=cellfun(@(x) strsplit(x,'.'),obj.names,'UniformOutput',false);
+        for i = 1:length(flds)
+            obj.OUTDEF=setfield(obj.OUTDEF,flds{i}{:},obj.defaults{i}); % SLOW 3
+        end
     end
     function parse4(obj)
         if ~obj.bFlag
             obj.groups=repmat({0},size(obj.P,1),1);
             obj.bOptional=false(size(obj.P,1),1);
+            return
+        end
+        bGSimple=cellfun(@(x) numel(x)==1 && isnumeric(x), obj.P(:,4));
+        if all(bGSimple)
+            obj.groups=obj.P(:,4);
+            obj.bOptional=cell2mat(obj.groups) > 0;
             return
         end
         [obj.groups,obj.bOptional]=cellfun(@(x) nest_fun(obj,x), obj.P(:,4),'UniformOutput',false);
@@ -115,13 +138,33 @@ methods
         end
     end
     function parse3_flags(obj)
-        if ~obj.bTest
-            n=size(obj.P);
-            obj.tests=repmat({@(varargin) true},n,1);
-            obj.bNest3=repmat({false},n,1);
+        n=size(obj.P,1);
+        obj.tests=repmat({{''}},n,1);
+        obj.bNest3=repmat({false},n,1);
+        obj.cls3=repmat({{''}},n,1);
+
+        bEmpty=cellfun(@isempty,obj.P(:,3));
+        if ~obj.bTest || all(bEmpty)
             return
         end
-        [obj.tests,obj.bNest3,meta,obj.cls3]=cellfun(@(x) nest_fun(obj,x,obj.RE),obj.P(:,3),'UniformOutput',false);
+        %P3=obj.P(:,3);
+        bNest=~bEmpty;
+
+
+        [obj.tests(bNest),obj.bNest3(bNest),meta,obj.cls3(bNest)]=cellfun(@(x) nest_fun(obj,x,obj.RE),obj.P(bNest,3),'UniformOutput',false);
+        %[obj.tests,obj.bNest3,meta,obj.cls3]=cellfun(@(x) nest_fun(obj,x,obj.RE),obj.P(:,3),'UniformOutput',false);
+        %if bTest
+        %    33
+        %    obj.bNest3
+        %    obj.cls3
+        %    obj.tests
+        %    dk
+        %end
+        %obj.tests
+        %obj.bNest3
+        %obj.cls3
+        %dk
+
         function [options,bNest3,meta,cls]=nest_fun(obj,in,RE)
             if isa(in,'dict') || isa(in,'struct')
                 bNest3=true;
@@ -134,41 +177,86 @@ methods
                 options=in;
             end
             nInd=cellfun(@isnumeric,options);
-            re='[!]([A-Za-z0-9_]+)';
             cls=cell(size(options));
-            cls(~nInd)=cellfun(@(x) [x{:}] ,regexp(options(~nInd),re,'tokens','once'),'UniformOutput',false);
-            %cls=regexp(options,re,'tokens');
-
             flags=cell(size(options));
-            flags(~nInd)=regexp(options(~nInd),RE,'tokens','once');
-            options(~nInd)=cellfun(@(x) regexprep(x,RE,''),options(~nInd),'UniformOutput',false);
-
             bNest3=false(size(options));
-            bNest3(~nInd)=~cellfun(@isempty,cls(~nInd));
-            %bNest3(~nInd)=cellfun(@(x) any(contains(x,'!')),flags(~nInd));
+            bMeta=false(size(options));
+
+            %bCls=false(size(options));
+
+
+            if any(~nInd)
+                %- SLOW
+                bNest3(~nInd)=startsWith(options(~nInd),'!');
+                bMeta(~nInd)=bNest3 & contains(options(~nInd),'@');
+                options(~nInd)=regexprep(options(~nInd),RE,'');
+                if any(bNest3)
+                    cls(bNest3 & ~nInd)=cellfun(@(x) x(2:end),options(bNest3 & ~nInd),'UniformOutput',false);
+                end
+            end
+
+            %[cls(~nInd),options(~nInd),flags(~nInd)]=cellfun(@(x) nest_nest_fun(x,RE),options(~nInd),'UniformOutput',false); %- SLOW
+
+            %[bNest3(~nInd),bMeta(~nInd)]=cellfun(@nest_nest_fun2,cls(~nInd),flags(~nInd)); %- SLOW
+
             if any(bNest3)
                 unest=unique(options(bNest3));
-                ind=~ismember(unest,obj.uNest3);
+                ind=~ismember_cell(unest,obj.uNest3);
                 if any(ind)
                     obj.uNest3=[obj.uNest3 unest];
                 end
             end
-            %bCopy=cellfun(@(x) any(contains(x,'#')),flags);
-            bMeta=false(size(options));
-            bMeta(~nInd)=cellfun(@(x) any(contains(x,'@')),flags(~nInd));
             if ~bMeta
                 meta=cell(size(bMeta));
                 return
             end
             [meta,options]=cellfun(@Args.splitMetaArgs,options);
         end
+        function [cls,options,flags]=nest_nest_fun(options,RE)
+            re='[!]([A-Za-z0-9_]+)';
+
+            cls=regexp(options,re,'tokens','once');
+            cls=[cls{:}];
+            flags=regexp(options,RE,'tokens','once');
+            options=regexprep(options,RE,'');
+
+        end
+        function [bNest3,bMeta]=nest_nest_fun2(cls,flags)
+            bNest3=~isempty(cls);
+            bMeta=any(contains(flags,'@'));
+        end
     end
     function parse1(obj)
+
         %obj.names=cellfun(@(x) regexprep(x,obj.RE,''),obj.P(:,1),'UniformOutput',false);
-        [obj.names,obj.aliases,obj.bNest1,obj.bCopy,obj.position,bExpand,obj.bContract]=cellfun(@(x) nest_fun(x,obj.RE),obj.P(:,1),'UniformOutput',false);
+        bTest=false;
+        if ~any(cellfun(@iscell ,obj.P(:,1)))
+            mtch=regexp(strjoin(obj.P(:,1)),obj.RE,'once');
+            if isempty(mtch)
+                sz=[size(obj.P,1),1];
+                obj.position=zeros(sz);
+                obj.bNest1=num2cell(false(sz));
+                obj.bNest1_1=false(sz);
+                obj.bExpand=false(sz);
+                obj.bStruct=false(sz);
+                obj.bCopy=num2cell(false(sz));
+                obj.bContract=num2cell(false(sz));
+                obj.cls1=repmat({''},sz(1),sz(2));
+                obj.names=obj.P(:,1);
+                obj.aliases=cellfun(@(x) {x} ,obj.P(:,1),'UniformOutput',false);
+                obj.bAlias=false;
+                obj.allAliases=obj.names;
+                return
+                %bTest=true;
+            end
+        end
+        obj.d_alias2name=containers.Map;
+        obj.d_name2aliases=containers.Map;
+        [obj.names,obj.aliases,obj.bNest1,obj.cls1,obj.bCopy,bStruct,obj.position,bExpand,obj.bContract]=cellfun(@(x) nest_fun(x,obj.RE),obj.P(:,1),'UniformOutput',false);
 
         obj.position=cell2mat(obj.position);
         obj.bExpand=cell2mat(bExpand);
+        obj.bStruct=cell2mat(bStruct);
         obj.bNest1_1=cellfun(@(x) x(1),obj.bNest1);
 
         %e=obj.aliases(obj.bExpand)
@@ -176,9 +264,22 @@ methods
         %c=obj.aliases(obj.bContract)
         %c{:}
 
+        %if bTest
+        %    33
+        %        obj.position
+        %        obj.bNest1
+        %        obj.bExpand
+        %        obj.bCopy
+        %        obj.bContract
+        %        obj.cls1
+        %        obj.names
+        %        obj.aliases
 
-        obj.get_dicts();
-        function [name,aliases,bNest1,bCopy,pos,bExpand,bContract] = nest_fun(in,RE)
+        %dk
+        %end
+
+        obj.get_dicts(false);
+        function [name,naliases,bNest1,cls1,bCopy,bStruct,pos,bExpand,bContract] = nest_fun(in,RE)
             if ~iscell(in)
                 aliases={in};
                 name=in;
@@ -186,12 +287,19 @@ methods
                 aliases=in;
                 name=in{1};
             end
-            flags=regexp(aliases,RE,'tokens','once');
-            name=regexprep(name,RE,'');
-            aliases=regexprep(aliases,RE,'');
+            flags=regexp(aliases,RE,'tokens','once'); %- SLOW 2
+            %b=regexp(aliases,RE,'start','once'); %- SLOW 2
+            %bEmp=isempty([b{:}]);
+            bEmp=cellfun(@(x) any(isempty(x)),flags); %- SLOW 1
+            naliases=regexprep(aliases,RE,''); %- SLOW 3
+            name=regexprep(name,RE,'');        %- SLOW 4
 
 
-            bStruct=cellfun(@(x,y) any(contains(x,'.') ),aliases);
+            %[bNest1,bCopy,bStruct,bEmp]=cellfun(@nest_nest_fun,flags,aliases);
+            bNest1=contains(aliases,'!');
+            bCopy=contains(aliases,'#');
+            bStruct=contains(naliases,'.');
+
             %bStruct=cellfun(@(x,y) any(contains(x,'.') | contains(y,'!')),aliases,flags);
             bExpand=  numel(bStruct) > 1 &&  bStruct(1) && ~any(bStruct(2:end));
             if bExpand
@@ -201,9 +309,11 @@ methods
             if bContract
                 bContract=find(bStruct);
             end
-            bNest1=cellfun(@(x) any(contains(x,'!')),flags);
-            bCopy=cellfun(@(x) any(contains(x,'#')),flags);
-            bEmp=cellfun(@(x) any(isempty(x))     ,flags);
+            if bNest1(1)
+                cls1=name;
+            else
+                cls1='';
+            end
 
             nInd=~bEmp & ~bNest1 & ~bCopy;
             if ~any(nInd)
@@ -212,47 +322,73 @@ methods
                 pos=flags{1}(nInd);
             end
             %flags(cellfun(@isempty,flags))=[];
+            bStruct=any(bStruct);
 
         end
+        function [bNest1,bCopy,bStruct,bEmp]=nest_nest_fun(flags,aliases)
+            bNest1=any(contains(flags,'!'));
+            bCopy=any(contains(flags,'#'));
+            bStruct=any(contains(aliases,'.'));
+            bEmp=any(isempty(flags));
+        end
     end
-    function get_dicts(obj)
-        %obj.alias2f=containers.Map;
-        %obj.f2name=containers.Map;
-        %
-        obj.alias2name=containers.Map;
-        obj.name2aliases=containers.Map;
+    function aliases=name2aliases(obj,name);
+        if obj.bAlias
+            aliases=obj.d_name2aliases(name);
+        else
+            aliases={name};
+        end
+    end
+    function name=alias2name(obj,alias);
+        if obj.bAlias
+            name=obj.d_alias2name(alias);
+        else
+            name=alias;
+        end
+    end
+    function get_dicts(obj,bEasy)
 
-        usr=keys(obj.Parent.UsrArgs); % NOTE REQUIRES USER ARGS
+        usr=obj.Parent.UsrNames; % NOTE REQUIRES USER ARGS
 
-        obj.names=cellfun(@(n,f,b,o) name_fun(obj,usr,n,f,b,o), obj.aliases, obj.F, obj.bNest3, num2cell(obj.bNest1_1),'UniformOutput',false);
+        bNest3=cellfun(@(x) numel(x)==1 && x,obj.bNest3);
+        obj.bAlias=any(bNest3);
+        if ~obj.bAlias
+            obj.allAliases=obj.names;
+            return
+        end
+
+        obj.names=cellfun(@(n,b,o) name_fun(obj,usr,n,b,o), obj.aliases, obj.bNest3, num2cell(obj.bNest1_1),'UniformOutput',false);
 
         % NOTE REGET NAMES AND ALIASES
-        obj.aliases=cellfun(@(x) obj.name2aliases(x),obj.names,'UniformOutput',false);
+        obj.aliases=cellfun(@(x) obj.d_name2aliases(x),obj.names,'UniformOutput',false);
         obj.allAliases=[obj.aliases{:}]';
 
-        function name=name_fun(obj,usrkeys,names,f,bNest3,bNest1)
-            if bNest3(1) & bNest1 & length(names)==2 && isequal(ismember(names,usrkeys),[false true])
+        %obj.aliases{:}
+        function name=name_fun(obj,usrkeys,names,bNest3,bNest1)
+            if bNest3(1) & bNest1 & length(names)==2 && isequal(ismember_cell(names,usrkeys),[false true]) %- SLOW 3
                 % NOTE THIS CHANGES ORDER OF P1 BASED UPON TYPE USER IS PROVIDING
-                i=2;
-            else
-                i=1;
+                if length(names)==2
+                    names=[names(2) names(1)];
+                else
+                    names=[names(2) names(1) names(3:end)];
+                end
             end
             if iscell(names)
                 % HANDLE ALIASES
-                name=names{i};
-                obj.name2aliases(name)=names;
+                name=names{1};
+                obj.d_name2aliases(name)=names; %- SLOW 1
                 %obj.f2name(f)=names{i};
                 for j = 1:length(names)
                     %obj.alias2f(name)=f;
-                    %obj.alias2name(names{i})=names{i};
-                    obj.alias2name(names{j})=name;
+                    %obj.d_alias2name(names{i})=names{i};
+                    obj.d_alias2name(names{j})=name; %- SLOW 2
                 end
             else
                 name=names;
-                obj.name2aliases(names)={names};
+                obj.d_name2aliases(names)={names};
                 %obj.f2name(f)=names;
                 obj.alias2f(names)=f;
-                obj.alias2name(names)=names;
+                obj.d_alias2name(names)=names;
             end
         end
     end
@@ -263,32 +399,42 @@ methods
             obj.toggles=[obj.names,obj.tests];
             return
         end
-        [obj.tests,obj.toggles]=cellfun(@(a,t,c,bn3,bn1,bo) nest_fun(a,t,c,bn3,bn1,bo), obj.aliases,obj.tests,obj.cls3,obj.bNest3,obj.bNest1,num2cell(obj.bOptional),'UniformOutput',false);
+        [obj.tests,obj.toggles]=cellfun(@(a,t,o,c,bn3,bn1,bo) nest_fun(a,t,o,c,bn3,bn1,bo), obj.aliases,obj.tests,obj.cls1,obj.cls3,obj.bNest3,obj.bNest1,num2cell(obj.bOptional),'UniformOutput',false);
         obj.toggles=vertcat(obj.toggles{:});
-        function [test,toggle]=nest_fun(aliases,T,cls,bNest3,bNest1,bOptional)
 
-            if bOptional || isempty(T) || (iscell(T) && numel(T) == 1 && isempty(T{1}))
+        function [test,toggle]=nest_fun(aliases,T,prp,cls,bNest3,bNest1,bOptional)
+
+            %if bOptional || isempty(T) || (iscell(T) && numel(T) == 1 && isempty(T{1}))
+            if isempty(T) || (iscell(T) && numel(T) == 1 && isempty(T{1}))
                 test=@(varargin) true;
                 tog=test;
+
                 toggle={aliases{1},tog};
                 return
             elseif bNest3
                 % HANDLE OPTIONS AND STRUCTS
                 cls(cellfun(@islogical,cls))=[];
                 if isempty(cls)
-                    test=@(x) isobject(x) || ismember(class(x),{'dict','struct'});
+                    test=@(x) isobject(x) || ismember_cell(class(x),{'dict','struct'});
                 elseif numel(bNest3)==1 && numel(cls) == 1
                     % 1 object
                     test=@(x) isa(x,cls{1});
                 elseif  numel(bNest3) == numel(cls)
                     % multiple objects
-                    test=@(x) ismember(class(x),cls);
+                    test=@(x) ismember_cell(class(x),cls);
                 elseif numel(bNest3) > numel(cls)
                     % structs and object
-                    test=@(x) ismember(class(x),[cls,{'dict','struct'}]);
+                    test=@(x) ismember_cell(class(x),[cls,{'dict','struct'}]);
                 end
                 tog=test;
-                toggle={aliases{1},tog};
+
+                if bNest1(1)
+                    toggle={['@' prp] cls{1}};
+                    % XXX TOGGLES HANDLE NESTED CLASSES DIFFERENTLY?
+                    % check to see if child has toggler
+                else
+                    toggle={aliases{1},tog};
+                end
                 return
             end
 
@@ -306,6 +452,7 @@ methods
                 else
                     tog=T;
                 end
+
                 test=@(x) ismember(x,tog);
             elseif regexp(T,'(is[bB]inary|islogical)(_e)?$')
                 % binary -> list
@@ -326,7 +473,7 @@ methods
         if N == 0
             return
         end
-        [n,~]=find(ismember(obj.nestAliases{N},name));
+        [~,n]=ismember_cell(obj.nestAliases{N},name);
         nestName=obj.nestAliases{N}{n,1};
     end
     function N=name2nestMatch(obj,name)
@@ -366,7 +513,7 @@ methods
         function [P,name,aliases,allAliases]=nest_fun(obj,cls,aliases)
             cls=cls{~cellfun(@isempty,cls)};
             if isempty(which(cls))
-                obj.Parent.append_error(srpintf('Unknown class ''%s''',cls));
+                obj.Parent.append_error(sprintf('Unknown class ''%s''',cls));
                 return
             end
 
@@ -411,21 +558,26 @@ methods
         %end
 
         obj.ContractMatch=cell(size(obj.names));
-        bInd=cellfun(@(x) x>0,obj.bContract);
-        bContract=bInd;
+        obj.ContractMatch12=zeros(size(obj.names,1),2);
+        %bInd=cellfun(@(x) x>0,obj.bContract);
+        bInd=cellfun(@(x) any(x>0),obj.bContract);
+        obj.bContractB=bInd;
         if any(bInd)
             inds=obj.bContract(bInd);
-            obj.ContractMatch(bInd)=cellfun(@(x,y) find_match_fun(obj,x,y), obj.aliases(bInd),inds,'UniformOutput',false);
+            [obj.ContractMatch(bInd),out1,out2]=cellfun(@(x,y) find_match_fun(obj,x,y), obj.aliases(bInd),inds,'UniformOutput',false);
+            obj.ContractMatch12(bInd,:)=cell2mat([out1 out2]);
         end
-        function out=find_match_fun(obj,aliases,inds)
+        function [out,out1,out2]=find_match_fun(obj,aliases,inds)
             if nargin < 3
                 inds=2:length(aliases);
             end
             %aliases=regexprep(aliases(inds),'\..*$','');
             aliases=aliases(inds);
-            mInds=cellfun(@(x) find(ismember(x, aliases  )), obj.aliases,'UniformOutput',false);
-            bInd=find(~cellfun(@isempty,mInds));
-            out=[bInd vertcat(mInds{bInd})];
+            mInds=cellfun(@(x) find(ismember_cell(x, aliases  )), obj.aliases,'UniformOutput',false);
+            bind=find(~cellfun(@isempty,mInds));
+            out=[bind vertcat(mInds{bind})];
+            out1=out(1);
+            out2=out(2);
             %out=mInds;
             %out=cellfun(@(x,y) x{y} ,obj.aliases(bInd),mInds(bInd),'UniformOutput',false);
         end

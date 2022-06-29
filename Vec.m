@@ -9,34 +9,37 @@ methods(Static)
     end
     function out = isN(in,n)
         if n == 1
-            out=Vec.isCol(in);
+            out=isvector(in) && ize(in,2)==1;
             return
         elseif n ==2
-            out=Vec.isRow(in);
+            out=isvector(in) && size(in,1)==1;
             return
         end
         sz=size(in);
         out=ndims(in)==n && all(sz(1:n)==1);
     end
     function out = isCol(in)
-        out=ndims(in)==2 && size(in,1)>1 && size(in,2)==1;
+        out=isvector(in) && ~isrow(in);
     end
     function out = isRow(in)
-        out=ndims(in)==2 && size(in,1)==1 && size(in,2)>1;
+        out=isvector(in) && isrow(in);
     end
     function out = col(in)
-        if Vec.isCol(in)
-            out=in;
-            return
-        else
+        if isrow(in) || ~isvector(in)
             out=in(:);
+        else
+            out=in;
         end
     end
     function out = row(in)
-        if Vec.isCol(in)
-            out=transpose(in);
+        if ~isrow(in)
+            if isvector(in)
+                out=transpose(in);
+            else
+                out=transpose(in(:));
+            end
         else
-            out=transpose(in(:));
+            out=in;
         end
     end
     function V=insert(V,inds,vals)

@@ -1,5 +1,5 @@
 classdef Range < handle
-methods(Static) 
+methods(Static)
     function [ROWS,COLS]=getConvRC(IszRC,kernSz)
         Rh=floor(kernSz(1)/2);
         Rw=floor(kernSz(2)/2);
@@ -80,7 +80,69 @@ methods(Static)
         out = temp*(j-i) + i;
 
     end
-    function y = exp(x1,x2,n)
+    function out=colonFun(fun,varargin)
+        if nargin == 2
+            s=1;
+            m=[];
+            e=varargin{1};
+        elseif nargin == 3
+            s=varargin{1};
+            m=[];
+            e=varargin{2};
+        elseif nargin == 4
+            s=varargin{1};
+            m=varargin{2};
+            e=varargin{3};
+        end
+        ss=fun(s);
+        ee=fun(e);
+
+        % TODO
+    end
+    function out=colonExp(varargin)
+        if nargin == 1
+            s=1;
+            m=[];
+            e=varargin{1};
+            a=[];
+        elseif nargin == 2
+            s=varargin{1};
+            m=[];
+            e=varargin{2};
+            a=[];
+        elseif nargin == 3
+            s=varargin{1};
+            m=[];
+            e=varargin{2};
+            a=varargin{3};
+        elseif nargin == 4
+            s=varargin{1};
+            m=varargin{2};
+            e=varargin{3};
+            a=varargin{4};
+        end
+
+        if isempty(a)
+            if isempty(m)
+                r=log(s):log(e);
+            else
+                %M=Num.logn(m,a);
+                M=m;
+                r=log(s):M:log(e);
+            end
+            out=exp(r);
+        else
+            if isempty(m)
+                r=Num.logn(s,a):Num.logn(e,a);
+            else
+                %M=Num.logn(m,a);
+                M=m;
+                r=Num.logn(s,a):M:Num.logn(e,a);
+            end
+            out=a.^r;
+        end
+    end
+    function y = exp(x1,x2,n,a)
         % function y = Range.exp(x1,x2,n)
         %
         %   generates vector of n expontially spaced points between x1 and x2
@@ -92,8 +154,13 @@ methods(Static)
         % y:  exponentially spaced points (linear on a log axis)
 
         if nargin == 2, n = 10; end
+        if nargin < 4, a = []; end
 
-        y = exp(linspace(log(x1),log(x2),n));
+        if isempty(a)
+            y = exp(linspace(log(x1),log(x2),n));
+        else
+            y=a.^(linspace(Num.logn(x1,a),Num.logn(x2,a),n));
+        end
 
     end
 

@@ -58,6 +58,7 @@ methods(Static, Access=private)
             p = [matlabroot '\sys\perl\win32\bin\perl.exe'];
             bExist = exist(p,'file')==2;
         else
+            % XXX
             [p,bExist] = Sys.which('perl');
             p = (regexprep(p,{'^\s*','\s*$'},'')); % deblank lead and trail
         end

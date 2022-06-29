@@ -47,42 +47,68 @@ classdef Args < handle & ArgsCon & ArgsTest
 
 %%% MAIN INTERFACES
 methods(Static)
-    function [out,dummy,obj]=parse(parent,P,varargin)
+    function [out,dummy,toggler,obj]=parse(parent,P,varargin)
         st=dbstack(); st=st(2:end);
 
-        [obj,out,errors]=ArgsCon(parent,P,struct('nout',nargout,'stack',st,'bNested',false),varargin);
+        obj=ArgsCon(parent,P,struct('nout',nargout,'stack',st,'bNested',false),varargin);
+
+        errors=obj.return_errors();
+        out=obj.OUT;
+        unmatched=obj.OUTUM;
+        obj.OBJ=[];
+
         if ~isempty(errors); throwAsCaller(errors); end
 
         dummy=[];
+        toggler=obj.Toggler;
     end
-    function [out,unmatched,obj]=parseLoose(parent,P,varargin)
+    function [out,unmatched,toggler,obj]=parseLoose(parent,P,varargin)
         st=dbstack(); st=st(2:end);
 
         Opts=struct('caller',st(2).name,'nout',nargout,'stack',st,'KeepUnmatched',true,'bNested',false);
-        [obj,out,errors,unmatched]=ArgsCon(parent,P,Opts,varargin);
+        obj=ArgsCon(parent,P,Opts,varargin);
+
+        errors=obj.return_errors();
+        out=obj.OUT;
+        unmatched=obj.OUTUM;
+        obj.OBJ=[];
 
         if ~isempty(errors); throwAsCaller(errors); end
+        toggler=obj.Toggler;
     end
-    function [out,dummy,obj]=parseIgnore(parent,P,varargin)
+    function [out,dummy,toggler,obj]=parseIgnore(parent,P,varargin)
         st=dbstack(); st=st(2:end);
 
         Opts=struct('caller',st(2).name,'nout',nargout,'stack',callr,'KeepUnmatched',false,'IgnoreUnmatched',true,'bNested',false);
-        [obj,out,errors]=ArgsCon(parent,P,Opts,varargin);
+        obj=ArgsCon(parent,P,Opts,varargin);
+
+        errors=obj.return_errors();
+        out=obj.OUT;
+        unmatched=obj.OUTUM;
+        obj.OBJ=[];
+
 
         if ~isempty(errors); throwAsCaller(errors); end
         dummy=[];
+        toggler=obj.Toggler;
     end
-    function [out,dummy,obj]=parseKeep(parent,P,varargin)
+    function [out,dummy,toggler,obj]=parseKeep(parent,P,varargin)
         st=dbstack();
         st=st(2:end);
 
         Opts=struct('caller',st(2).name,'nout',nargout,'stack',callr,'KeepUnmatched',true,'IgnoreUnmatched',true,'bNested',false);
         obj=ArgsCon(parent,P,Opts,varargin);
+
+        errors=obj.return_errors();
         out=obj.OUT;
+        unmatched=obj.OUTUM;
+        obj.OBJ=[];
+
         if ~isempty(errors); throwAsCaller(errors); end
         dummy=[];
+        toggler=obj.Toggler;
     end
-    function [out,dummy,obj]=test_(parent,P,varargin)
+    function [out,dummy,toggler,obj]=test_(parent,P,varargin)
         st=dbstack();
         st=st(2:end);
 
@@ -91,6 +117,7 @@ methods(Static)
         out=obj.OUT;
         if ~isempty(errors); throwAsCaller(errors); end
         dummy=[];
+        toggler=obj.Toggler;
     end
 %% UTIL
     function opts=group(p,argsin)
@@ -122,7 +149,7 @@ methods(Static)
         if length(vargs) == 1 && isstruct(vargs{1})
             % if first varg is a struct, handle as all vargs
             opts=struct(pargs{:});
-            opts=Struct.merge(opts,vargs{1});
+            opts=Struct.merge(opts,vargs{1}); % SLOW XXX
         else
             opts=struct(pargs{:}, vargs{:});
         end
@@ -199,10 +226,10 @@ methods(Static)
         flds=fieldnames(opts);
         for i = 1:length(flds)
             fld=flds{i};
-            if bObj & isprop(parent,fld)
+            if bObj && Obj.hasprop_fast(parent,fld)
                 parent.(fld)=opts.(fld);
                 opts=rmfield(opts,fld);
-            elseif bStruct & isfield(parent,fld)
+            elseif bStruct && isfield(parent,fld)
                 parent.(fld)=opts.(fld);
                 opts=rmfield(opts,fld);
             end
@@ -258,14 +285,16 @@ methods(Static)
         end
     end
 %% UTIL
-    function [val,varargin]=getPair(name,varargin)
+    function [val,varargin,bSuccess]=getPair(name,varargin)
         ind=find(cellfun(@(x) isequal(x,name),varargin));
         if ~isempty(ind)
             val=varargin{ind+1};
             varargin(ind+1)=[];
             varargin(ind)=[];
+            bSuccess=true;
         else
             val=0;
+            bSuccess=false;
         end
     end
     function out=getNPosArgs(varargin)
@@ -277,12 +306,12 @@ methods(Static)
         out=n-nPairs*2;
     end
     function [keys,vals,posVals,nPosArgs]=pairsToKeysVals(varargin)
-        nPosArgs=getNPosArgs(varargin{:});
+        nPosArgs=Args.getNPosArgs(varargin{:});
         n=numel(varargin);
         inds=(1:2:n)+nPosArgs;
         keys=varargin(inds);
         vals=varargin(inds+1);
-        posVals=varargin(1:getNPosArgs);
+        posVals=varargin(1:nPosArgs);
     end
     function [varsA,varsB]=splitPairs(vars,fldsInB)
         %vars={'a',33,'b',44,'cd',55,'ef',100};
@@ -345,8 +374,8 @@ methods(Static)
         str=regexprep(str,re,'');
     end
     function [objs,args,str]=splitMeta(str)
-        re='[@\.]([A-Za-z0-9_]+)';
-        objs=regexp(str,re,'tokens');
+        re1='[@\.]([A-Za-z0-9_]+)';
+        objs=regexp(str,re1,'tokens');
         objs=cellfun(@(x) x{1},objs,'UniformOutput',false);
 
         re2='[(,] *([A-Za-z0-9_]+)';

@@ -10,7 +10,7 @@ methods(Static)
             if isempty(C{i})
                 continue
             elseif ~exist('cur','var') || isempty(cur)
-                curtmp=datestr(C{i});
+                curtmp=datetime(datestr(C{i}));
                 if isempty(curtmp)
                     continue
                 end
@@ -19,7 +19,7 @@ methods(Static)
                 continue
             end
 
-            new=datestr(C{i});
+            new=datetime(datestr(C{i}));
             if isempty(new)
                 continue
             end
@@ -27,6 +27,13 @@ methods(Static)
                 ind=i;
             end
         end
+    end
+    function unix()
+    end
+    function d=unix2human_file(t)
+       % d = datetime(t,'ConvertFrom','epochtime','TicksPerSecond',1e9,'Format','dd-MMM-yyyy HH:mm:ss.SSSSSSSSS');
+         %d = datetime(t,'ConvertFrom','epochtime','TicksPerSecond',1e3,'Format','dd-MMM-yyyy HH:mm:ss.SSS')
+         d = char(datetime(t,'ConvertFrom','epochtime','Format','yy-MM-dd_HH:mm'));
     end
 end
 end

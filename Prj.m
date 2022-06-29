@@ -67,7 +67,7 @@ methods(Static, Access=private)
         while ~isempty(dire)
             files=Dir.files(dire);
             dires=Dir.files(dire);
-            if ismember('.px',files) || ismember('.git',dires)
+            if ismember('pkg.cfg',files) || ismember('.git',dires)
                 name=Dir.parentName([dire '.']);
                 return
             end
