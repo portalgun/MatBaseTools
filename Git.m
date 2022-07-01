@@ -176,7 +176,7 @@ methods(Static)
             state=3;
         end
 
-        if (nargin < 2 || isempty(site)) || ~isempty(msg);
+        if (nargin < 2 || isempty(site)) || ~isempty(msg)
             return
         end
 
@@ -206,5 +206,20 @@ methods(Static)
         end
 
     end
+
+    %disp(strjoin(preOrder,' '))
+
+    %function get_missing_gitdir()
+    %    ['git init;
+    %      git checkout -b junk-branch;  ...
+    %      git add .;  ...
+    %      git commit -m ''importing local files''; ...
+    %      git remote add origin %s; ...
+    %      git fetch --all; ...
+    %      git checkout remotes/origin/master ...
+    %      git checkout -b master ...
+    %      git branch -D junk-branch ...
+    %    ];
+    %end
 end
 end

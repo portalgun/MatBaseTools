@@ -17,7 +17,72 @@ methods(Static)
         dirs=dir(dire);
         out=numel(dirs) <= 2;
     end
+    function own(usr,dire)
+        if Sys.isunix()
+            cmd=['chown -R ' usr ' ' dire];
+        else
+            error();
+        end
+        [status,msg]=Sys.command(cmd);
+        if status
+            disp(msg);
+        end
 
+    end
+    function [status,msg]=addWrite(dire,bRecursive)
+        if nargin < 2 || isempty(bRecursive)
+            bRecursive=false;
+        end
+        bUnix=isunix();
+        if iscell(dire)
+            cmd=strjoin(cellfun(@(x) getCmdFun(x,bUnix,bRecursive),dire,'UniformOutput',false),' ');
+        else
+            cmd=getCmdFun(dire,bUnix,bRecursive);
+        end
+
+        [status,msg]=Sys.command(cmd);
+        if nargout > 1 && status
+            disp(msg);
+        end
+        function cmd=getCmdFun(dire,bUnix,bRecursive)
+            if bUnix()
+                if bRecursive
+                    cmd=['chmod -R +w ' dire ';'];
+                else
+                    cmd=['chmod +w ' dire ';'];
+                end
+            else
+                error();
+            end
+        end
+    end
+    function [status,msg]=rmWrite(dire,bRecursive)
+        if nargin < 2 || isempty(bRecursive)
+            bRecursive=false;
+        end
+        bUnix=isunix();
+        if iscell(dire)
+            cmd=strjoin(cellfun(@(x) getCmdFun(x,bUnix,bRecursive),dire,'UniformOutput',false),' ');
+        else
+            cmd=getCmdFun(dire,bUnix,bRecursive);
+        end
+
+        [status,msg]=Sys.command(cmd);
+        if nargout > 1 && status
+            disp(msg);
+        end
+        function cmd=getCmdFun(dire,bUnix,bRecursive)
+            if bUnix()
+                if bRecursive
+                    cmd=['chmod -R -w ' dire ';'];
+                else
+                    cmd=['chmod -w ' dire ';'];
+                end
+            else
+                error();
+            end
+        end
+    end
     function [fnames,fnamesfull]=re(dire,str)
         [fnames,fnamesfull]=Dir.re_(dire,str,1,1);
     end

@@ -150,6 +150,73 @@ methods(Static)
         end
     end
 
+    function [Snew,cnt] = select(S,sz,ind,bKeepNot,bRecursive)
+    %Select 1 element at ind within dimension with size
+    if ~exist('bKeepNot','var') || isempty(bKeepNot)
+        bKeepNot=0;
+    end
+    if ~exist('bRecursive','var') || isempty(bRecursive)
+        bRecursive=0;
+    end
+    Snew=struct;
+    if isempty(S)
+        return
+    end
+    flds=fieldnames(S);
+    cnt=0;
+    for i = 1:length(flds)
+        fld=flds{i};
+
+        dim=size(S.(fld))==sz;
+        if bRecursive && isstruct(S.(fld))
+            [Snew,cntr] = Struct.select(S,sz,ind,bKeepNot,bRecursive);
+            if cntr>0
+                cnt=cnt+1;
+            end
+        elseif bKeepNot && sum(dim)==0
+            Snew.(fld)=S.(fld);
+        elseif sum(dim)==0
+            continue
+        else
+            Snew.(fld)=Struct.indexDimensionBySize(ind,sz,S.(fld),1);
+            cnt=cnt+1;
+        end
+
+    end
+end
+methods(Static,Access=private)
+    function Snew=naive_merge_fun(SS)
+        Snew=struct();
+        for i=1:length(SS)
+            flds=fieldnames(SS{i});
+            for f = 1:length(flds)
+                fld=flds{f};
+                Snew.(fld)=SS{i}.(fld);
+            end
+        end
+    end
+    function thing = indexDimensionBySize(ind,sz,thing,bOneInd)
+        if ~exist('bOneInd','var') || isempty(bOneInd)
+            bOneInd=0;
+        end
+        dim=size(thing)==sz;
+        if bOneInd && sum(dim)>1 && ndims(thing) <= 2 && dim(1)==1
+            dim=logical(zeros(size(sz)));
+            dim(1)=1;
+        else
+            i=find(dim,1,'last');
+            dim=logical(zeros(size(dim)));
+            dim(i)=1;
+        end
+        col=strrep(Num.toStr(double(dim)),'0',':');
+        col=strrep(col,'1','ind');
+        if iscell(thing)
+            STR=['thing{' col '};'];
+        else
+            STR=['thing(' col ');'];
+        end
+        thing=eval(STR);
+    end
     function [dims,FLDS]=getCatDims(varargin)
         % FIRST SUITABLE size of 1 for each fld
 
@@ -179,18 +246,5 @@ methods(Static)
             end
         end
     end
-end
-methods(Static,Access=private)
-    function Snew=naive_merge_fun(SS)
-        Snew=struct();
-        for i=1:length(SS)
-            flds=fieldnames(SS{i});
-            for f = 1:length(flds)
-                fld=flds{f};
-                Snew.(fld)=SS{i}.(fld);
-            end
-        end
-    end
-
 end
 end

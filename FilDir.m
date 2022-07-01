@@ -176,6 +176,10 @@ methods(Static)
         FilDir.ln(destination);
     end
     function unlink(thing)
+        if iscell(thing)
+            cellfun(@FilDir.unlink,thing);
+            return
+        end
         if ~FilDir.isLink(thing)
             error(['File/directory ' thing ' is not a link.']);
         else
