@@ -431,11 +431,12 @@ methods(Static, Access=private)
         if ~exist('dire','var') || isempty(dire)
             dire=pwd;
         end
-        try
+
+        %try
             bFd=Sys.isInstalled('fd');
-        catch
-            bFd=false;
-        end
+        %catch
+            %bFd=false;
+        %end
         if exist('depth','var') && ~isempty(depth) && bFd
             depthStr=['--maxdepth ' num2str(depth) ' '];
         elseif exist('depth','var') && ~isempty(depth)

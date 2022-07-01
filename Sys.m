@@ -59,13 +59,29 @@ methods(Static)
         %REMOVE EMPTY LINES
         out=out(~cellfun('isempty',out));
     end
+    function [status,out]=command(cmd)
+        if isunix()
+            if Sys.islinux()
+                ld='export LD_LIBRARY_PATH=""; ';
+            else
+                ld='';
+            end
+            [status,msg]=unix([ld cmd]);
+        else
+            [status,msg]=system(cmd);
+        end
+        out=msg(1:end-1);
+    end
     function out=users()
         out=Sys.usersCmd_();
     end
     function out=isInstalled(cmd)
         % XXX
-        %isInstalledCmd_(cmd);
-        out=Sys.isInstalledC_(cmd);
+        try
+            out=Sys.isInstalledC_(cmd);
+        catch
+            out=Sys.isInstalledCmd_(cmd);
+        end
     end
     function [out,bSuccess]=which(cmd)
         %out=Sys.whichC_(cmd); % XXX DOESN"T WORK ON SOME MACHINES?
@@ -175,7 +191,7 @@ methods(Static, Access=private)
         out=isinstalled_cpp(cmd);
     end
     function out=isInstalledCmd_(cmd)
-        out=whichCmd_(cmd);
+        out=Sys.whichCmd_(cmd);
         if isempty(out)
             out=false;
         else

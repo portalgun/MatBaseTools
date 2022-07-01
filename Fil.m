@@ -85,6 +85,11 @@ methods(Static)
     end
 %% PARTS
     function [varargout]=parts(name)
+        if iscell(name)
+            varargout=cell(nargout,1);
+            [varargout{:}]=cellfun(@Fil.parts,name,'UniformOutput',false);
+            return
+        end
         dire=Fil.fpartsdir(name);
         %dire=Dir.parse(dire);
         if dire(end) ~= filesep

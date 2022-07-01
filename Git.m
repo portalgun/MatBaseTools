@@ -14,39 +14,53 @@ methods(Static)
             direName=[direName '@' version];
         end
     end
-    function status=checkout(dire,version)
+    function [msg,status]=checkout(dire,version)
         %checkout -> into lib
         %dire stable -> lib
+        %dire=Dir.parent(dire);
         oldDir=cd(dire);
-        if isunix
-            [~,msg]=unix(['git checkout ' version ' --quiet']);
-        else
-            [~,msg]=system(['git checkout ' version ' --quiet']);
+        cl=onCleanup(@() cd(oldDir));
+        cmd=['git checkout ' version ' --quiet'];
+        [status,msg]=Sys.command(cmd);
+        if status==0
+            msg='';
         end
-        cd(oldDir);
     end
-    function status=clone(site,direName)
-        out=Git.ocal_state(direName);
+    function [MSG,exitflag]=clone(site,direName,local_state)
+        msg=[];
+        if nargout >= 3 && ~isempty(local_state)
+            out=local_state;
+        else
+            out=Git.local_state(direName);
+        end
+        % 0 dire doesn't exist            - Gd
+        % 1 empty                         - Gd but rm
+        % 2 not empty with files, no .git - Bd
+        % 3 has git                       - Gd no clone
+        % 4 has git, origin doesn't match - Bd
+
         if out==1
-            'out equals 1'
-            % TODO
-        elseif out==2
-            disp(['Warning: cannot find repo at ' site])
-        elseif out==3
-            origin=Git.get_origin(direName);
-            if ~strcmp(origin,site)
-               % TODO
-               'origin does not match site'
-            end
+            rmdir(direName);
         end
 
-        if out==0 && isunix
+        if isempty(msg)
+            out=0;
             cmd=['git clone -q ' site ' ' direName ];
-            [status,msg]=unix(cmd);
-        elseif out==0
-            cmd=['git clone ' site ' ' direName ];
-            [status,msg]=system(cmd);
+            [exitflag,msg]=Sys.command(cmd);
+
+            if exitflag~=0
+                out=1;
+                msg=['Git error:' newline msg(1:end-1)];
+            end
+
         end
+
+        if nargout < 1
+            Error.warnSoft(msg);
+        else
+            MSG=msg;
+        end
+
     end
     function hash=git_hash(dire)
         if exist('dire','var') && ~isempty(dire)
@@ -105,20 +119,92 @@ methods(Static)
             cd(oldDir);
         end
     end
-    function [out]=local_state(direName)
-        % 0 dire doesn't exist
-        % 1 empty
-        % 2 not empty with files, no .git
-        % 3 has git
-        if ~exist(direName,'dir')
-            out=0;
-        elseif ~exist([direName '.git'],'dir') && length(dir(dirName)) == 2
-            out=1;
-        elseif ~exist([direName '.git'],'dir') && length(dir(dirName)) > 2
-            out=2;
-        else
-            out=3;
+    function [stats,ms]=update(direName)
+        % REFS
+        if nargin > 0 && ~isempty(direName)
+            oldDir=cd(direName);
+            cl=onCleanup(@() cd(oldDir));
         end
+        cmd=sprintf('git remote update');
+        [status,ms]=Sys.command(cmd);
+    end
+    function out=needsPull(direName)
+        if nargin > 0 && ~isempty(direName)
+            oldDir=cd(direName);
+            cl=onCleanup(@() cd(oldDir));
+        end
+
+        cmd=sprintf('git status -uno');
+        [status,ms]=Sys.command(cmd);
+        out=~isempty(ms);
+    end
+    function [status,msg]=pull(direName,branch)
+        if nargin > 0 && ~isempty(direName)
+            oldDir=cd(direName);
+            cl=onCleanup(@() cd(oldDir));
+        end
+        if nargin < 2 || isempty(branch)
+            branch='';
+        end
+        cmd=sprintf('git pull origin %s',branch);
+        [status,msg]=Sys.command(cmd);
+    end
+    function [exitflag,state,msg]=local_state(direName,site)
+        % 0 dire doesn't exist            - Gd
+        % 1 empty                         - Gd but rm
+        % 2 not empty with files, no .git - Bd
+        % 3 has git                       - Gd no clone
+        %
+        % 4 has git, origin doesn't match - Bd
+        % 5 url is unreachable            - Bd
+        % 6 timeout
+        % 7 needs pull
+
+        msg=[];
+        exitflag=0;
+        bExist=Dir.exist(direName);
+        bGitExist=Dir.exist([direName '.git']);
+        if ~bExist
+            state=0;
+        elseif  ~bGitExist && length(dir(direName)) == 2
+            state=1;
+        elseif ~bGitExist && length(dir(direName)) > 2
+            exitflag=1;
+            state=2;
+            msg=['Destination directory not empty and not detected as repo ' direName];
+        else
+            state=3;
+        end
+
+        if (nargin < 2 || isempty(site)) || ~isempty(msg);
+            return
+        end
+
+        if state == 3
+            origin=Git.get_origin(direName);
+            if ~strcmp(origin,site)
+                exitflag=1;
+                state=4;
+                msg=['Origin does not match site ' site];
+            end
+            return
+        end
+
+        % CHECK SITE
+        cmd=sprintf('timeout 6 git ls-remote "%s.git" CHECK_GIT_REMOTE_URL_REACHABILITY',site);
+        [status,ms]=Sys.command(cmd);
+        if status>1 % XXX correct?
+            exitflag=1;
+            state=6;
+            msg=['Check site url. Timeout while reaching site ' site];
+            return
+        elseif status==1
+            exitflag=1;
+            state=5;
+            msg=ms;
+            return
+        end
+
     end
 end
 end

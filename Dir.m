@@ -315,6 +315,7 @@ methods(Static)
 
         hst=Dir.highest(dire);
         [r,w,x]=FilDir.perms(hst);
+
         if strcmp(hst,Dir.last(dire)) && r && w && x;
             out=true;
             return
