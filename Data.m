@@ -1,6 +1,6 @@
 classdef Data < handle
 methods(Static)
-    function global(name,var)
+    function glbl(name,var)
 
         str=['global ' name ' = var;' ];
         eval(str);
