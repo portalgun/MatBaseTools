@@ -29,7 +29,7 @@ methods(Static)
         AInds=Sub.toInd(rA,IszRC);
         IdealInds=transpose(1:N);
 
-        
+
         D=sqrt(sum(A(:,2)-rA(:,2)).^2);
 
         % OUT OF RANGE GETS PUT INTO LAST BIN

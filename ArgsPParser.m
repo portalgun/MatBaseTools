@@ -176,7 +176,7 @@ methods
             else
                 options=in;
             end
-            nInd=cellfun(@isnumeric,options);
+            nInd=cellfun(@(x) isnumeric(x) || isa(x,'function_handle'),options);
             cls=cell(size(options));
             flags=cell(size(options));
             bNest3=false(size(options));
@@ -441,7 +441,11 @@ methods
             if iscell(T) && numel(T) == 1
                 T=T{1};
             end
-            if isnumeric(T) && (numel(T)==2 || numel(T)==3)
+
+            if isa(T,'function_handle')
+                test=T;
+                tog=T;
+            elseif isnumeric(T) && (numel(T)==2 || numel(T)==3)
                 % min,max,inc
                 test=@(x) x >= T(1) && x <= T(end);
                 tog=test;
